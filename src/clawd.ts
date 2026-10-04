@@ -1,5 +1,6 @@
-// clawd: Claude's mascot wanders in (walking, on a skateboard, or carrying a
-// parcel), stops somewhere along the floor and gets to work. What he does
+// The workbench (one of the show's two places, show.ts): Claude's mascot
+// wanders in (walking, on a skateboard, or carrying a parcel), stops somewhere
+// along the floor and gets to work. What he does
 // there is a vignette drawn at random from a pool that fits the turn: the tool
 // running (searching, editing, a shell command, subagents), thinking, writing
 // or asking. Long stops switch vignettes every SEGMENT ticks.
@@ -9,6 +10,7 @@
 // Brewing, Tinkering, Cultivating, Catapulting…). The art here is our own.
 import { canvas, cells, draw, frame, mod, noise, plot, put } from './cells'
 import type { Canvas, Grid } from './cells'
+import type { Muse, MuseVignette } from './muse'
 import { SCENE_ROWS, glyphStars, ground } from './scenes'
 import type { Act } from './themes'
 
@@ -424,10 +426,10 @@ function routeOf(lap: number, w: number) {
  * Where Clawd is at tick `t`: walking in, at his stop (ticks into it), or
  * walking out. Tick 0 is the start of the first stop: a turn opens with him at work.
  */
-function placeOf(t: number, w: number): { x: number; stopped: number | null; lap: number; walk: Walk } {
-  const length = Math.ceil((w + CLAWD_W + 2) / SPEED) + 1 + STOP
-  const shifted = t + routeOf(0, w).inLen
-  const lap = Math.floor(shifted / length)
+function placeOf(t: number, w: number, salt = 0): { x: number; stopped: number | null; lap: number; walk: Walk } {
+  const length = lapLength(w)
+  const shifted = t + routeOf(salt, w).inLen
+  const lap = Math.floor(shifted / length) + salt
   const p = mod(shifted, length)
   const { stopX, fromRight, walk, inLen } = routeOf(lap, w)
   if (p < inLen) {
@@ -439,24 +441,68 @@ function placeOf(t: number, w: number): { x: number; stopped: number | null; lap
   return { x: fromRight ? stopX - out : stopX + out, stopped: null, lap, walk }
 }
 
-/** The vignette Clawd plays at tick `t` and how far into it he is, or null while he walks. */
-export function vignetteAt(t: number, w: number, act: Act, tool?: string): { vignette: Vignette; e: number } | null {
-  const { stopped, lap } = placeOf(t, w)
-  if (stopped === null) return null
-  const pool = poolOf(act, tool)
-  const segment = Math.floor(stopped / SEGMENT)
-  return { vignette: pool[Math.floor(noise(lap * 13 + segment * 5 + pool.length) * pool.length)]!, e: stopped - segment * SEGMENT }
+/** Ticks of one lap: in, the stop, and out of sight. */
+const lapLength = (w: number) => Math.ceil((w + CLAWD_W + 2) / SPEED) + 1 + STOP
+
+/**
+ * One visit to the bench as a stretch of the show (show.ts): a whole lap, or
+ * for the turn's first stretch the lap from his stop on. `t` for it is
+ * `start + local` (`start` may be negative).
+ */
+export function benchSpan(w: number, salt: number, isFirst: boolean): { length: number; start: number } {
+  const inLen = routeOf(salt, w).inLen
+  return isFirst ? { length: lapLength(w) - inLen, start: 0 } : { length: lapLength(w), start: -inLen }
 }
 
-export function clawdScene(t: number, w: number, act: Act, _audio?: unknown, tool?: string): Grid {
+// ---- the muse's vignettes ----------------------------------------------------
+
+const museCache = new WeakMap<MuseVignette, Vignette>()
+
+/** A scene the muse wrote: its prop on the bench, two frames taking turns, its caption above. */
+export function museVignette(v: MuseVignette): Vignette {
+  let made = museCache.get(v)
+  if (!made) {
+    made = {
+      name: `muse:${v.caption}`,
+      pose: v.pose,
+      px(cv, b, _e, t) {
+        const art = frame(v.frames, Math.floor(t / 4))
+        draw(cv, b, 7 - art.length, art, v.colors)
+      },
+      glyph(g, b) {
+        put(g, Math.max(0, Math.min(b, g[0]!.length - [...v.caption].length)), 0, v.caption, { c: '#e9b49a' })
+      },
+    }
+    museCache.set(v, made)
+  }
+  return made
+}
+
+/** The vignette Clawd plays at tick `t` and how far into it he is, or null while he walks. */
+export function vignetteAt(t: number, w: number, act: Act, tool?: string, muse?: Muse, salt = 0): { vignette: Vignette; e: number } | null {
+  const { stopped, lap } = placeOf(t, w, salt)
+  if (stopped === null) return null
+  const segment = Math.floor(stopped / SEGMENT)
+  const e = stopped - segment * SEGMENT
+  // The muse's scenes take most segments while there are some (not a waiting ask: that keeps its sign).
+  const own = muse?.vignettes ?? []
+  if (own.length > 0 && act !== 'ask' && noise(lap * 17 + segment * 3 + 1) < 0.65) {
+    return { vignette: museVignette(own[Math.floor(noise(lap * 19 + segment * 7) * own.length)]!), e }
+  }
+  const pool = poolOf(act, tool)
+  return { vignette: pool[Math.floor(noise(lap * 13 + segment * 5 + pool.length) * pool.length)]!, e }
+}
+
+/** The workbench: Clawd walks in, works through vignettes, walks out. `SCENE_ROWS` rows. */
+export function benchScene(t: number, w: number, act: Act, tool?: string, muse?: Muse, salt = 0): Grid {
   const cv = canvas(w, SCENE_ROWS)
   // A plank floor scrolling under his feet.
   ground(cv, t, 7, 0.5, [WOOD, '#5a4238', WOOD, '#7a5a4c', '#5a4238'])
-  const { x, stopped, walk } = placeOf(t, w)
+  const { x, stopped, walk } = placeOf(t, w, salt)
   const bench = x + CLAWD_W + 1
   const blink = mod(t, 30) < 2
 
-  const playing = stopped !== null ? vignetteAt(t, w, act, tool) : null
+  const playing = stopped !== null ? vignetteAt(t, w, act, tool, muse, salt) : null
   const vignette = playing?.vignette ?? null
   const e = playing?.e ?? 0
   vignette?.px?.(cv, bench, e, t, x)

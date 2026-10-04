@@ -1,31 +1,40 @@
 // What the views draw from: each session's turn (from opencode's events), the
-// pet's stats and mood, the theme, the preview and the audio tap. Reactive
-// (Solid stores and signals); plugin.tsx draws it.
+// pet's stats and mood, the muse's content and the sound seed. Reactive (Solid
+// stores and signals); plugin.tsx draws it.
 import type { Plugin } from '@opencode/plugin/tui'
 import { createEffect, createRoot, createSignal } from 'solid-js'
 import { createStore, produce } from 'solid-js/store'
 
-import { AudioMeter } from './audio'
-import type { AudioFeed } from './audio'
-import type { Choice, Config } from './config'
-import { m } from './i18n'
+import { SoundSeed, seedFrom } from './audio'
+import type { Config } from './config'
+import { lang, m } from './i18n'
+import { activityOf, clawdPrompt, museNeed, parseModel, parseTricks, parseVignettes, skatePrompt } from './muse'
+import type { Muse, MuseTrick, MuseVignette } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
 import type { News } from './pet'
-import { PET_W, dockPetOf, petArtOf } from './pets'
+import { CLAWD_PET, PET_W, dockPetOf } from './pets'
 import type { PetState } from './pets'
 import { startTap } from './tap'
 import type { TapStatus } from './tap'
-import { FINALE_MS, THEMES, isThemeName, pickRandom } from './themes'
-import type { Act, Finale, Mood, ThemeName } from './themes'
+import { FINALE_MS } from './themes'
+import type { Act, Finale, Mood } from './themes'
 import type { DockPet } from './types'
 
-const PREVIEW_MS = 8000
 /** How long the pet speaks of tests or a commit. */
 const NEWS_MS = 4000
 /** How long a pat's hearts float. */
 const PAT_MS = 2500
 /** Quiet this long after a turn, the companion dozes off. */
 const SLEEP_MS = 5 * 60_000
+/** A chance to ask the muse comes at most this often while turns run; it gives up after the timeout, and keeps this many of each kind. */
+const MUSE_EVERY_MS = 40_000
+const MUSE_TIMEOUT_MS = 300_000
+const MUSE_KEEP = 12
+
+/** The muse's state, for `/spinner status`. */
+export type MuseState = { isBusy: boolean; error: string | null; via: string | null; at: number; made: number }
+/** The latest seed and where it came from. */
+export type SeedState = { seed: number; from: 'sound' | 'random' } | null
 
 export type FinaleState = { kind: Finale; label: string; id: string }
 
@@ -40,34 +49,39 @@ export type Run = {
   finale: FinaleState | null
   mood: Mood
   news: { kind: News; id: string } | null
+  /** The turn's seed: the show's order of scenes and its parks follow it. */
+  seed: number
 }
 
-const IDLE: Run = { isTurn: false, act: 'think', running: {}, started: 0, finale: null, mood: 'hello', news: null }
+const IDLE: Run = { isTurn: false, act: 'think', running: {}, started: 0, finale: null, mood: 'hello', news: null, seed: 0 }
 
-type Prefs = { theme: Choice | null; visible: boolean | null; stage: boolean | null; companion: boolean | null }
+/** What the footer toggle sets; null follows the option. */
+type Prefs = { visible: boolean | null }
 
 const TONE: Partial<Record<PetState, DockPet['tone']>> = { ask: 'ask', error: 'error', aborted: 'aborted', sleep: 'sleep' }
 
 export type Spinner = ReturnType<typeof createSpinner>
 
 export function createSpinner(context: Plugin.Context, config: Config) {
-  const [prefs, updatePrefs] = context.storage.store<Prefs>('prefs', {
-    initial: { theme: null, visible: null, stage: null, companion: null },
-  })
+  const [prefs, updatePrefs] = context.storage.store<Prefs>('prefs', { initial: { visible: null } })
   const [pet, updatePet] = context.storage.store('pet', { initial: { xp: 0, love: 0 } })
-  // The theme drawn now, kept over hot reloads so `random` does not reroll.
-  const [drawn, setDrawn] = context.storage.memory('drawn', { initial: { theme: '', choice: '' } })
   const [runs, setRuns] = createStore<Record<string, Run>>({})
   // Questions and permission requests waiting, by root session.
   const [asks, setAsks] = createStore<Record<string, Record<string, true>>>({})
   const [pat, setPat] = createSignal<string | null>(null)
-  const [preview, setPreview] = createSignal<{ theme: ThemeName; id: string } | null>(null)
   const [tap, setTap] = createSignal<TapStatus & { isLive: boolean }>({ isLive: false, isAudible: false, error: null })
-  const meter = new AudioMeter()
+  const [lastSeed, setLastSeed] = createSignal<SeedState>(null)
+  const sound = new SoundSeed()
   const timers = new Set<ReturnType<typeof setTimeout>>()
   const sleepTimers = new Map<string, ReturnType<typeof setTimeout>>()
   // Each call's tool and command, for the news a shell command brings.
   const calls = new Map<string, { sid: string; tool: string; command?: string }>()
+  // What the muse wrote, newest first, and how it is doing.
+  // Kept across restarts (and shared by every opencode open): a turn opens with the last ones.
+  const [muse, updateMuse] = context.storage.store<{ tricks: MuseTrick[]; vignettes: MuseVignette[] }>('muse', { initial: { tricks: [], vignettes: [] } })
+  const [museState, setMuseState] = createSignal<MuseState>({ isBusy: false, error: null, via: null, at: 0, made: 0 })
+  // Set once opencode's free tier turns a direct call down: from then on, ask through the session.
+  let viaSession = false
 
   const later = (ms: number, fn: () => void) => {
     const id = setTimeout(() => {
@@ -80,21 +94,16 @@ export function createSpinner(context: Plugin.Context, config: Config) {
 
   // ---- settings ----------------------------------------------------------
 
-  const choice = (): Choice => prefs.theme ?? config.theme
   const isVisible = () => prefs.visible ?? config.isVisible
-  const hasStage = () => prefs.stage ?? config.hasStage
-  const hasCompanion = () => prefs.companion ?? config.hasCompanion
-  const theme = (): ThemeName => (isThemeName(drawn.theme) ? drawn.theme : 'clawd')
+  const hasStage = () => config.hasStage
+  const hasCompanion = () => config.hasCompanion
+  const modelText = (): string | null => config.model
 
-  /** Draws the theme a choice names; `random` keeps the one already drawn unless `isFresh`. */
-  function choose(picked: Choice, isFresh = false): ThemeName {
-    const keep = !isFresh && picked === 'random' && drawn.choice === 'random' && isThemeName(drawn.theme)
-    const name = picked !== 'random' ? picked : keep ? (drawn.theme as ThemeName) : pickRandom(Date.now())
-    setDrawn(d => {
-      d.theme = name
-      d.choice = picked
-    })
-    return name
+  /** A fresh seed: from the sound while something plays, else from crypto. */
+  function freshSeed(): number {
+    const made = seedFrom(tap().isLive && !tap().error ? sound : null)
+    setLastSeed(made)
+    return made.seed
   }
 
   // ---- sessions ----------------------------------------------------------
@@ -132,7 +141,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     const before = pet.xp
     void updatePet(d => void (d.xp += 1))
     if (levelOf(before + 1) > levelOf(before)) {
-      context.ui.toast.show({ message: m('pet.levelUp', { theme: theme(), level: levelOf(before + 1) }), variant: 'success' })
+      context.ui.toast.show({ message: m('pet.levelUp', { theme: 'Clawd', level: levelOf(before + 1) }), variant: 'success' })
     }
   }
 
@@ -208,11 +217,14 @@ export function createSpinner(context: Plugin.Context, config: Config) {
         r.running = {}
         r.started = Date.now()
         r.finale = null
+        r.seed = freshSeed()
       })
+      inspire(sid, true)?.catch(() => {})
     }),
     on('session.reasoning.started', e => {
       const sid = own(e.data.sessionID)
       if (sid && run(sid).isTurn) edit(sid, r => void (Object.keys(r.running).length === 0 && (r.act = 'think')))
+      if (sid) inspire(sid)?.catch(() => {})
     }),
     on('session.text.started', e => {
       const sid = own(e.data.sessionID)
@@ -237,6 +249,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
         r.running[e.data.id] = toolLabel({ ...input, tool })
         r.act = 'tool'
       })
+      inspire(sid)?.catch(() => {})
     }),
     ...(['session.tool.success', 'session.tool.failed'] as const).map(type =>
       on(type, e => {
@@ -273,6 +286,65 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     }),
   ]
 
+  // ---- the muse ----------------------------------------------------------
+
+  const withTimeout = <T,>(p: Promise<T>, ms: number) =>
+    Promise.race([p, new Promise<never>((_, reject) => later(ms, () => reject(new Error(`no reply in ${ms / 1000}s`))))])
+
+  /** One prompt to the muse's model; the text and the way it went. */
+  async function askModel(prompt: string, sid: string): Promise<{ text: string; via: string }> {
+    const pick = parseModel(modelText())
+    if (!pick) throw new Error('no model set')
+    const bySession = async () => ({ text: (await context.client.session.generate({ sessionID: sid, prompt })).text, via: 'session' })
+    if (pick === 'session' || viaSession) return bySession()
+    try {
+      const reply = await context.client.generate.text({ prompt, model: { providerID: pick.providerID, id: pick.id } })
+      return { text: reply.text, via: `${pick.providerID}/${pick.id}` }
+    } catch (err) {
+      // opencode's free models answer only inside a session: go through the session's own model.
+      if (!/free tier|within opencode/i.test(String((err as Error)?.message ?? err))) throw err
+      viaSession = true
+      return bySession()
+    }
+  }
+
+  /**
+   * A chance to ask the muse for new content, unless it is off, busy, or had a
+   * chance lately (`isEager`: sooner, at a turn's start). A fresh seed decides
+   * whether it asks and for what (muse.ts, `museNeed`); `isForced` always asks.
+   * Meanwhile the scene plays what is kept. Resolves to what it wrote.
+   */
+  function inspire(sid: string, isEager = false, isForced = false): Promise<string[]> | null {
+    const state = museState()
+    if (!isVisible() || !hasStage() || !parseModel(modelText()) || state.isBusy) return null
+    if (!isForced && Date.now() - state.at < (isEager ? 15_000 : MUSE_EVERY_MS)) return null
+    const seed = freshSeed()
+    setMuseState({ ...state, at: Date.now() })
+    const need = museNeed(muse, seed) ?? (isForced ? (muse.tricks.length <= muse.vignettes.length ? 'tricks' : 'vignettes') : null)
+    if (!need) return null
+    const r = run(sid)
+    const activity = activityOf(r.act, busyLabel(Object.values(r.running)) || undefined)
+    const prompt = need === 'tricks' ? skatePrompt(activity, seed) : clawdPrompt(activity, lang(), seed)
+    setMuseState(s => ({ ...s, isBusy: true }))
+    return withTimeout(askModel(prompt, sid), MUSE_TIMEOUT_MS)
+      .then(({ text, via }) => {
+        const made = need === 'tricks' ? parseTricks(text) : parseVignettes(text)
+        if (made.length === 0) throw new Error(`nothing usable in the reply: ${text.slice(0, 80)}`)
+        void updateMuse(d => {
+          if (need === 'tricks') d.tricks = [...(made as MuseTrick[]), ...d.tricks].slice(0, MUSE_KEEP)
+          else d.vignettes = [...(made as MuseVignette[]), ...d.vignettes].slice(0, MUSE_KEEP)
+        })
+        setMuseState(s => ({ ...s, isBusy: false, error: null, via, made: s.made + made.length }))
+        return made.map(item => ('name' in item ? item.name : item.caption))
+      })
+      .catch(err => {
+        const error = String((err as Error)?.message ?? err).split('\n')[0]!.slice(0, 160)
+        console.error('opencode-spinner muse:', error)
+        setMuseState(s => ({ ...s, isBusy: false, error }))
+        throw new Error(error)
+      })
+  }
+
   // ---- the pet -----------------------------------------------------------
 
   // Frames of the loops shown lately, by loop id: a new bubble keeps its frames.
@@ -281,7 +353,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   /** The pet for a session as it is now, or null while it is off. */
   function dockOf(sid: string): DockPet | null {
     if (!isVisible() || !hasCompanion()) return null
-    const name = theme()
+    const name = 'clawd'
     const state = stateOf(sid)
     const r = run(sid)
     const patId = pat()
@@ -297,7 +369,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     let loop = loops.get(id)
     if (!loop) {
       if (loops.size > 40) loops.clear()
-      loop = dockPetOf(petArtOf(name, THEMES[name].color), state, view, patId !== null, config.isStill)
+      loop = dockPetOf(CLAWD_PET, state, view, patId !== null, config.isStill)
       loops.set(id, loop)
     }
     return { ...loop, ...view }
@@ -316,29 +388,16 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     return love
   }
 
-  function showPreview(name: ThemeName): void {
-    const id = String(Date.now())
-    setPreview({ theme: name, id })
-    later(PREVIEW_MS, () => {
-      if (preview()?.id === id) setPreview(null)
-    })
-  }
-
   // ---- reactive upkeep ---------------------------------------------------
 
   let tapper: { stop: () => void } | null = null
   const disposeRoot = createRoot(dispose => {
-    // The theme follows its choice; a `random` already drawn stays.
+    // The tap listens while the band can show and the sound seed is on.
     createEffect(() => {
-      const picked = choice()
-      if (picked !== drawn.choice || !isThemeName(drawn.theme)) choose(picked)
-    })
-    // The tap runs exactly while the audio theme's band can show.
-    createEffect(() => {
-      const wants = theme() === 'audio' && isVisible() && hasStage()
+      const wants = config.hasSoundSeed && isVisible() && hasStage()
       if (wants && !tapper) {
         setTap({ isLive: true, isAudible: false, error: null })
-        tapper = startTap(meter, status => setTap({ ...status, isLive: true }))
+        tapper = startTap(sound, status => setTap({ ...status, isLive: true }))
       } else if (!wants && tapper) {
         tapper.stop()
         tapper = null
@@ -348,42 +407,31 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     return dispose
   })
 
-  /** What the audio scene is fed: live levels, null when the tap cannot run, undefined for the made-up signal. */
-  function audioFeed(name: ThemeName): AudioFeed {
-    const status = tap()
-    if (name !== 'audio' || !status.isLive) return undefined
-    return status.error ? null : meter.view()
-  }
-
   return {
     config,
     prefs,
     pet,
-    theme,
-    choice,
     isVisible,
     hasStage,
     hasCompanion,
-    preview,
     tap,
+    lastSeed,
     rootOf,
     run,
     /** The label of the tool a session runs now (the latest, subagents counted). */
     toolOf: (sid: string) => busyLabel(Object.values(run(sid).running)),
+    /** What the muse wrote, for the scene; kept across restarts. */
+    muse: (): Muse => muse,
+    museState,
+    modelText,
+    /** Asks the muse now, whatever the timing and the seed. */
+    inspireNow: (sid: string): Promise<string[]> | null => inspire(sid, true, true),
     stateOf,
     dockOf,
-    audioFeed,
-    choose,
     patPet,
-    showPreview,
-    /** Sets a switch, kept across restarts. */
-    setSwitch(field: 'visible' | 'stage' | 'companion', isOn: boolean) {
-      void updatePrefs(d => void (d[field] = isOn))
-    },
-    setChoice(picked: Choice): ThemeName {
-      const name = choose(picked, true)
-      void updatePrefs(d => void (d.theme = picked))
-      return name
+    /** The footer toggle: all animations on or off, kept across restarts. */
+    setVisible(isOn: boolean) {
+      void updatePrefs(d => void (d.visible = isOn))
     },
     petWidth: PET_W,
     dispose() {

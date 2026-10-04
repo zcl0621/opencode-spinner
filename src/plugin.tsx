@@ -1,23 +1,21 @@
-// spinner for the opencode 2.0 TUI: the band above the prompt (the theme's
-// scene while a turn runs, its finale after, the pet beside it), the mascot in
-// front of opencode's own running indicator, a footer toggle and `/spinner`.
+// spinner for the opencode 2.0 TUI: the band above the prompt (Clawd's show
+// while a turn runs, the finale after, the pet beside it), the mascot in front
+// of opencode's own running indicator, a footer toggle and `/spinner`.
 import { Plugin } from '@opencode/plugin/tui'
 import { TextAttributes } from '@opentui/core'
 import type { BoxRenderable } from '@opentui/core'
 import { useTerminalDimensions } from '@opentui/solid'
-import { createMemo, createSignal, For, onCleanup, Show } from 'solid-js'
+import { createMemo, createSignal, onCleanup, Show } from 'solid-js'
 
 import { parseCommand } from './command'
-import { CHOICES, readConfig } from './config'
-import type { Choice } from './config'
+import { readConfig } from './config'
 import { GridRows, SegRows } from './grid'
 import { m, resolveLanguage, setLang } from './i18n'
 import { levelOf } from './pet'
 import { PET_ROWS } from './pets'
 import { createSpinner } from './spinner'
 import type { Spinner } from './spinner'
-import { SPRITE_MS, STAGE_MS, THEMES, THEME_NAMES, finaleScene, frame, hsl, padTo, poseOf, textWidth } from './themes'
-import type { ThemeName } from './themes'
+import { SPRITE_MS, STAGE_MS, THEME, finaleScene, frame, padTo, poseOf, textWidth } from './themes'
 import type { DockPet } from './types'
 
 /** Below this many columns, or this many terminal rows, the band draws the pet in one row. */
@@ -88,35 +86,27 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
   const pet = createMemo(() => s.dockOf(sid()))
   const isCompact = () => columns() < COMPACT_COLUMNS || dims().height < COMPACT_ROWS
 
-  /** What the scene shows, if anything: a preview, the turn, the audio theme listening, or the finale. */
+  /** What the scene shows, if anything: the turn, or the finale. */
   const scene = createMemo(() => {
-    const shown = s.preview()
-    if (shown) return { theme: shown.theme, act: 'think' as const, finale: null }
     if (!s.isVisible() || !s.hasStage() || isCompact()) return null
     const r = s.run(sid())
-    const name = s.theme()
-    const tap = s.tap()
-    if (r.isTurn) return { theme: name, act: s.stateOf(sid()) === 'ask' ? ('ask' as const) : r.act, finale: null }
-    if (name === 'audio' && tap.isLive && !tap.error && tap.isAudible && !r.finale) return { theme: name, act: 'wait' as const, finale: null }
-    if (r.finale) return { theme: name, act: r.act, finale: r.finale }
+    if (r.isTurn) return { act: s.stateOf(sid()) === 'ask' ? ('ask' as const) : r.act, finale: null }
+    if (r.finale) return { act: r.act, finale: r.finale }
     return null
   })
 
   const petColumns = () => (pet() && !isCompact() ? pet()!.width + 1 + PET_LABEL_W : 0)
-  // Each scene plays from its own first frame: a turn, a finale, a preview.
+  // Each scene plays from its own first frame: a turn, a finale.
   const sceneKey = createMemo(() => {
-    const shown = s.preview()
-    if (shown) return `preview:${shown.id}`
     const r = s.run(sid())
     if (r.isTurn) return `turn:${r.started}`
-    return r.finale ? `finale:${r.finale.id}` : 'listen'
+    return r.finale ? `finale:${r.finale.id}` : ''
   })
   let keyed = ''
   let base = 0
   const grid = createMemo(() => {
     const sc = scene()
     if (!sc) return null
-    const theme = THEMES[sc.theme]
     // Two cells in on the left, one on the right, two between the scene and the pet's words.
     const w = Math.max(16, columns() - 5 - petColumns())
     if (sceneKey() !== keyed) {
@@ -124,8 +114,8 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
       base = t()
     }
     const tick = t() - base
-    if (sc.finale) return finaleScene(theme, sc.finale.kind, sc.finale.label, tick, w)
-    return theme.scene(tick, w, sc.act, s.audioFeed(sc.theme), s.toolOf(sid()))
+    if (sc.finale) return finaleScene(sc.finale.kind, sc.finale.label, tick, w)
+    return THEME.scene(tick, w, sc.act, s.toolOf(sid()), s.muse(), s.run(sid()).seed)
   })
 
   return (
@@ -139,7 +129,7 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
     >
       <Show when={grid() || pet()}>
         <Show
-          when={!isCompact() || s.preview()}
+          when={!isCompact()}
           fallback={
             <Show when={pet()}>
               {p => (
@@ -208,11 +198,10 @@ function PetPlayer(props: { spinner: Spinner; pet: DockPet }) {
 
 /** The pet in one row, for a band too short or narrow for its block. */
 function PetLine(props: { spinner: Spinner; pet: DockPet }) {
-  const theme = () => THEMES[props.spinner.theme()]
   return (
     <box flexDirection="row" gap={1} flexShrink={1} onMouseUp={() => props.spinner.patPet()}>
-      <text fg={theme().color} attributes={TextAttributes.BOLD} wrapMode="none">
-        {theme().sprite.say[0] ?? ''}
+      <text fg={THEME.color} attributes={TextAttributes.BOLD} wrapMode="none">
+        {THEME.sprite.say[0] ?? ''}
       </text>
       <Show when={props.pet.bubble}>
         <text fg={TONE[props.pet.tone].fg} attributes={TONE[props.pet.tone].attributes} wrapMode="none" truncate>
@@ -236,26 +225,15 @@ function Mascot(props: { spinner: Spinner; sessionID: string }) {
   const sid = createMemo(() => s.rootOf(props.sessionID))
   const shows = () => s.isVisible() && !s.hasCompanion() && s.run(sid()).isTurn
   const text = createMemo(() => {
-    const frames = THEMES[s.theme()].sprite[poseOf(s.stateOf(sid()))]
+    const frames = THEME.sprite[poseOf(s.stateOf(sid()))]
     return padTo(frame(frames, t()), Math.max(...frames.map(textWidth)))
   })
   return (
     <Show when={shows()}>
       <box flexShrink={0} marginLeft={1}>
-        <Show
-          when={THEMES[s.theme()].isRainbow}
-          fallback={
-            <text fg={THEMES[s.theme()].color} attributes={TextAttributes.BOLD} wrapMode="none">
-              {text()}
-            </text>
-          }
-        >
-          <text wrapMode="none">
-            <For each={Array.from(text())}>
-              {(ch, i) => <span style={{ fg: hsl((i() * 40 + t() * 24) % 360, 0.95, 0.62), attributes: TextAttributes.BOLD }}>{ch}</span>}
-            </For>
-          </text>
-        </Show>
+        <text fg={THEME.color} attributes={TextAttributes.BOLD} wrapMode="none">
+          {text()}
+        </text>
       </box>
     </Show>
   )
@@ -266,7 +244,7 @@ function Mascot(props: { spinner: Spinner; sessionID: string }) {
 function FooterToggle(props: { context: Plugin.Context; spinner: Spinner }) {
   const theme = props.context.theme
   return (
-    <box flexShrink={0} onMouseUp={() => props.spinner.setSwitch('visible', !props.spinner.isVisible())}>
+    <box flexShrink={0} onMouseUp={() => props.spinner.setVisible(!props.spinner.isVisible())}>
       <text fg={props.spinner.isVisible() ? theme.text.base : theme.text.muted} wrapMode="none">
         Spinner
       </text>
@@ -279,28 +257,26 @@ function FooterToggle(props: { context: Plugin.Context; spinner: Spinner }) {
 function Commands(props: { context: Plugin.Context; spinner: Spinner }) {
   const { context, spinner: s } = props
   const toast = (message: string) => context.ui.toast.show({ title: 'spinner', message })
-  const list = THEME_NAMES.join(' · ')
 
   function status(): string {
-    const current = s.theme()
-    const lines = [
-      m('cmd.status', { theme: `${current}${s.choice() === 'random' ? m('cmd.randomNote') : ''}` }),
-      m('cmd.petStats', { theme: current, level: levelOf(s.pet.xp), xp: s.pet.xp, love: s.pet.love }),
-    ]
+    const lines = [m('cmd.petStats', { theme: 'Clawd', level: levelOf(s.pet.xp), xp: s.pet.xp, love: s.pet.love })]
     if (!s.isVisible()) lines.push(m('cmd.hidden'))
-    if (!s.hasStage()) lines.push(m('cmd.stageOff'))
-    if (!s.hasCompanion()) lines.push(m('cmd.companionOff'))
-    if (current === 'audio') {
-      const { error } = s.tap()
-      lines.push(error ? m('cmd.audioOff', { reason: error }) : m('cmd.audioOn'))
-    }
-    lines.push(m('cmd.themes', { list: THEME_NAMES.map(n => `${n} ${THEMES[n].happy}`).join(' · ') }), m('cmd.usage'))
+    const model = s.modelText()
+    const muse = s.museState()
+    const kept = s.muse()
+    if (model) {
+      const via = muse.via === 'session' && model.toLowerCase() !== 'session' ? ` ${m('cmd.museVia')}` : ''
+      lines.push(`${m('cmd.museOn', { model, tricks: kept.tricks.length, scenes: kept.vignettes.length })}${muse.isBusy ? ` ${m('cmd.museBusy')}` : ''}${via}`)
+      if (muse.error) lines.push(m('cmd.museError', { error: muse.error }))
+    } else lines.push(m('cmd.museOff'))
+    const tap = s.tap()
+    const seed = s.lastSeed()
+    if (!s.config.hasSoundSeed) lines.push(m('cmd.seedRandom'))
+    else if (tap.error) lines.push(m('cmd.seedNoSound', { reason: tap.error }))
+    else lines.push(m(tap.isAudible ? 'cmd.seedSound' : 'cmd.seedQuiet'))
+    if (seed) lines.push(m('cmd.seedLast', { seed: seed.seed, from: seed.from }))
+    lines.push(m('cmd.usage'))
     return lines.join('\n')
-  }
-
-  function switched(picked: Choice): string {
-    const name = s.setChoice(picked)
-    return picked === 'random' ? m('cmd.random', { theme: name }) : m('cmd.switched', { theme: name })
   }
 
   async function runCommand(args: string): Promise<void> {
@@ -309,35 +285,10 @@ function Commands(props: { context: Plugin.Context; spinner: Spinner }) {
       case 'status':
         await context.ui.dialog.alert({ title: 'spinner', message: status() })
         return
-      case 'visible':
-        s.setSwitch('visible', command.isOn)
-        return toast(m(command.isOn ? 'cmd.shown' : 'cmd.hidden'))
-      case 'stage':
-        s.setSwitch('stage', command.isOn)
-        return toast(m(command.isOn ? 'cmd.stageOn' : 'cmd.stageOff'))
-      case 'companion':
-        s.setSwitch('companion', command.isOn)
-        return toast(m(command.isOn ? 'cmd.companionOn' : 'cmd.companionOff'))
       case 'pat':
-        return toast(m('cmd.pat', { theme: s.theme(), love: s.patPet() }))
-      case 'preview': {
-        const name: ThemeName = command.theme ?? s.theme()
-        s.showPreview(name)
-        return toast(m('cmd.preview', { theme: name }))
-      }
-      case 'pick': {
-        const picked = await context.ui.dialog.select<Choice>({
-          title: 'spinner',
-          current: s.choice(),
-          options: CHOICES.map(c => ({ title: c, value: c, description: c === 'random' ? undefined : THEMES[c].happy })),
-        })
-        if (picked === undefined) return
-        return toast(switched(picked))
-      }
-      case 'theme':
-        return toast(switched(command.theme))
+        return toast(m('cmd.pat', { theme: 'Clawd', love: s.patPet() }))
       case 'unknown':
-        return toast(m('cmd.unknown', { name: command.name, list }))
+        return toast(m('cmd.unknown', { name: command.name }))
     }
   }
 
@@ -354,15 +305,8 @@ function Commands(props: { context: Plugin.Context; spinner: Spinner }) {
         run: input => runCommand(input ?? ''),
       },
       {
-        id: 'spinner.theme',
-        title: 'Spinner: pick a theme',
-        group: 'Spinner',
-        palette: true,
-        run: () => runCommand('theme'),
-      },
-      {
         id: 'spinner.pet',
-        title: 'Spinner: pet the companion',
+        title: 'Spinner: pet Clawd',
         group: 'Spinner',
         palette: true,
         run: () => runCommand('pet'),
@@ -371,4 +315,3 @@ function Commands(props: { context: Plugin.Context; spinner: Spinner }) {
   }))
   return null
 }
-

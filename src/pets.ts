@@ -1,8 +1,8 @@
 // The companion: a pixel pet three rows tall (6 px in half blocks), drawn the
 // same wherever it stands (right-aligned above the prompt).
-// A theme gives its body and where its eyes sit; blinking, breathing, the
-// expressions and the props beside it are the same for every pet.
-import { blank, canvas, cells, draw, mod, noise, plot, segments } from './cells'
+// Clawd's body and where his eyes sit; blinking, breathing, the expressions
+// and the props beside him are drawn from those.
+import { canvas, cells, draw, mod, noise, plot, segments } from './cells'
 import type { Canvas, Grid } from './cells'
 import type { DockPet } from './types'
 import type { Act, Mood } from './themes'
@@ -142,11 +142,6 @@ function gray(hex: string): string {
   return `#${h}${h}${h}`
 }
 
-/** A blank pet-sized grid, for a theme with no pet. */
-export function noPet(): Grid {
-  return blank(PET_W, PET_ROWS)
-}
-
 // ---- the pets ------------------------------------------------------------------
 
 /** Clawd, as Claude Code draws him: a warm orange body, arms out, four legs. */
@@ -206,100 +201,4 @@ export function dockPetOf(
 /** A run as plain data: a key left undefined is refused in state and Client props. */
 function plainSeg(seg: ReturnType<typeof segments>[number]): DockPet['frames'][number][number][number] {
   return Object.fromEntries(Object.entries(seg).filter(([, v]) => v !== undefined)) as DockPet['frames'][number][number][number]
-}
-
-/** A small fighter with a face in its canopy, its exhaust flickering. */
-export const THUNDER_PET: PetArt = {
-  body: ['..AA........', '.ABBBBWWWW..', 'FBBBBBWWWWBC', '.ABBBBBBBB..', '..AA........'],
-  step: ['..AA........', '.ABBBBWWWW..', 'GBBBBBWWWWBC', '.ABBBBBBBB..', '..AA........'],
-  colors: { A: '#4361ee', B: '#4cc9f0', W: '#e0fbfc', C: '#f72585', F: '#ff9f1c', G: '#ffd60a' },
-  eyes: [7, 9],
-  eyeRow: 1,
-  eye: '#14213d',
-  lid: '#e0fbfc',
-  mouth: [7, 3],
-  blush: '#ff8fab',
-  spark: '#ffd60a',
-}
-
-/** A maze ghost, its skirt rippling. */
-export const CHOMP_PET: PetArt = {
-  body: ['...GGGGGG...', '..GWWGGWWG..', '.GGWWGGWWGG.', '.GGGGGGGGGG.', '.G.GG.GG.GG.'],
-  step: ['...GGGGGG...', '..GWWGGWWG..', '.GGWWGGWWGG.', '.GGGGGGGGGG.', '.GG.GG.GG.G.'],
-  colors: { G: '#ff5d8f', W: '#ffffff' },
-  eyes: [4, 8],
-  eyeRow: 1,
-  eye: '#2121de',
-  lid: '#ffffff',
-  mouth: [5, 3],
-  spark: '#ffff00',
-}
-
-/** An electric mouse: black-tipped ears, red cheeks. */
-export const SPARKY_PET: PetArt = {
-  body: ['KY.....YK.Y.', '.YYYYYYY.YY.', 'YYYYYYYYY.Y.', 'RYYYYYYYR...', '.YY.YY.YY...'],
-  step: ['KY.....YK..Y', '.YYYYYYY.YY.', 'YYYYYYYYYY..', 'RYYYYYYYR...', 'YY..YY..YY..'],
-  colors: { K: '#5a3a22', Y: '#ffd60a', R: '#e63946' },
-  eyes: [2, 6],
-  eyeRow: 1,
-  eye: '#5a3a22',
-  lid: '#ffd60a',
-  blush: '#ff8fab',
-  spark: '#fff3b0',
-}
-
-/** A blue robot cat: white face, red nose, a bell on its collar. */
-export const BLUECAT_PET: PetArt = {
-  body: ['..BBBBBBBB..', '.BBWWWWWWBB.', 'BBWWWWWWWWBB', 'BBWWWRRWWWBB', '.BRRRYYRRRB.'],
-  colors: { B: '#0096c7', W: '#ffffff', R: '#e63946', Y: '#ffd60a' },
-  eyes: [4, 7],
-  eyeRow: 1,
-  eye: '#1b1b1b',
-  lid: '#ffffff',
-  mouth: [5, 3],
-  blush: '#ff8fab',
-  spark: '#80ffdb',
-}
-
-/** A pop-tart cat, its head poking out on the right. */
-export const NYAN_PET: PetArt = {
-  body: ['.TTTTT.G...G', 'TPSPPTGGGGGG', 'TPPSPTGGGGGG', 'TPSPPTGGGGGG', '.L.L.L..L.L.'],
-  step: ['.TTTTT.G...G', 'TPSPPTGGGGGG', 'TPPSPTGGGGGG', 'TPSPPTGGGGGG', 'L.L.L..L.L..'],
-  colors: { T: '#ffcc99', P: '#ff99cc', S: '#ff3399', G: '#a0a0a0', L: '#a0a0a0' },
-  eyes: [8, 10],
-  eyeRow: 1,
-  eye: '#1b1b1b',
-  lid: '#a0a0a0',
-  blush: '#ff99cc',
-  spark: '#ffff00',
-}
-
-/** A round listener in big headphones, swaying to whatever plays. */
-export const AUDIO_PET: PetArt = {
-  body: ['..HHHHHHHH..', '.H.BBBBBB.H.', 'CCBBBBBBBBCC', 'CCBBBBBBBBCC', '.B.B....B.B.'],
-  step: ['..HHHHHHHH..', '.H.BBBBBB.H.', 'CCBBBBBBBBCC', 'CCBBBBBBBBCC', '..B.B..B.B..'],
-  colors: { H: '#5a189a', C: '#c77dff', B: '#e0aaff' },
-  eyes: [4, 7],
-  eyeRow: 1,
-  eye: '#240046',
-  lid: '#e0aaff',
-  mouth: [5, 3],
-  blush: '#ff8fab',
-  spark: '#4cc9f0',
-}
-
-const PETS: Record<string, PetArt> = {
-  clawd: CLAWD_PET,
-  skate: CLAWD_PET,
-  thunder: THUNDER_PET,
-  chomp: CHOMP_PET,
-  sparky: SPARKY_PET,
-  bluecat: BLUECAT_PET,
-  nyan: NYAN_PET,
-  audio: AUDIO_PET,
-}
-
-/** A theme's pet; a theme without one of its own borrows Clawd's shape in its color. */
-export function petArtOf(theme: string, color: string): PetArt {
-  return PETS[theme] ?? { ...CLAWD_PET, colors: { O: color, L: color, D: color }, lid: color }
 }

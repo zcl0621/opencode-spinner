@@ -26,7 +26,7 @@ export function SegRows(props: { rows: readonly (readonly (Seg | DockSeg)[])[] }
   )
 }
 
-/** A grid of cells (themes.ts, scenes.ts). */
+/** A grid of cells (show.ts, themes.ts). */
 export function GridRows(props: { grid: Grid }) {
   return <SegRows rows={props.grid.map(segments)} />
 }

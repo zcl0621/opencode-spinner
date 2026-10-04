@@ -14,7 +14,7 @@ setLang('en')
 
 type Handler = (event: { type: string; data: unknown }) => void
 
-function fake(options: Record<string, unknown> = {}, roots: Record<string, string> = {}) {
+function fake(options: Record<string, unknown> = {}, roots: Record<string, string> = {}, client: unknown = {}) {
   const handlers = new Map<string, Set<Handler>>()
   const toasts: string[] = []
   const storage = <T extends object>(initial: T) => {
@@ -23,6 +23,7 @@ function fake(options: Record<string, unknown> = {}, roots: Record<string, strin
   }
   const context = {
     options,
+    client,
     data: {
       on(type: string, handler: Handler) {
         if (!handlers.has(type)) handlers.set(type, new Set())
@@ -45,8 +46,9 @@ function fake(options: Record<string, unknown> = {}, roots: Record<string, strin
 let current: Spinner | undefined
 afterEach(() => current?.dispose())
 
-function start(options?: Record<string, unknown>, roots?: Record<string, string>) {
-  const f = fake(options, roots)
+/** No tap (it would build swiftc) and no model unless a test asks for them. */
+function start(options?: Record<string, unknown>, roots?: Record<string, string>, client?: unknown) {
+  const f = fake({ sound: false, model: false, ...options }, roots, client)
   current = f.spinner
   return f
 }
@@ -54,8 +56,7 @@ function start(options?: Record<string, unknown>, roots?: Record<string, string>
 const S = 'ses_a'
 
 test('a turn: thinking, a tool with its label, saying, then the finale and xp', () => {
-  const { spinner, emit } = start({ theme: 'clawd' })
-  expect(spinner.theme()).toBe('clawd')
+  const { spinner, emit } = start()
   expect(spinner.stateOf(S)).toBe('hello')
   expect(spinner.dockOf(S)!.bubble).toBe('I’m here with you~')
 
@@ -85,7 +86,7 @@ test('a turn: thinking, a tool with its label, saying, then the finale and xp', 
 })
 
 test('parallel tools: the pet stays busy until the last ends; subagents are counted', () => {
-  const { spinner, emit } = start({ theme: 'clawd' })
+  const { spinner, emit } = start()
   emit('session.execution.started', { sessionID: S })
   for (const id of ['a', 'b', 'c']) {
     emit('session.tool.input.started', { sessionID: S, id, name: 'subagent' })
@@ -101,7 +102,7 @@ test('parallel tools: the pet stays busy until the last ends; subagents are coun
 
 test('a permission prompt or a question shows as ask, also from a subagent, until answered', () => {
   const child = 'ses_child'
-  const { spinner, emit } = start({ theme: 'clawd' }, { [child]: S })
+  const { spinner, emit } = start({}, { [child]: S })
   emit('session.execution.started', { sessionID: S })
   emit('permission.asked', { id: 'p1', sessionID: S })
   expect(spinner.stateOf(S)).toBe('ask')
@@ -125,7 +126,7 @@ test('a permission prompt or a question shows as ask, also from a subagent, unti
 })
 
 test('tests and commits the agent runs: a word from the pet, xp for good news', () => {
-  const { spinner, emit } = start({ theme: 'clawd' })
+  const { spinner, emit } = start()
   emit('session.execution.started', { sessionID: S })
   const shell = (id: string, command: string, exit: number) => {
     emit('session.tool.input.started', { sessionID: S, id, name: 'shell' })
@@ -145,7 +146,7 @@ test('tests and commits the agent runs: a word from the pet, xp for good news', 
 })
 
 test('interrupted and failed turns', () => {
-  const { spinner, emit, toasts } = start({ theme: 'clawd' })
+  const { spinner, emit, toasts } = start()
   emit('session.execution.started', { sessionID: S })
   emit('session.execution.interrupted', { sessionID: S })
   expect(spinner.run(S).finale).toMatchObject({ kind: 'aborted', label: 'Interrupted' })
@@ -162,13 +163,13 @@ test('interrupted and failed turns', () => {
 })
 
 test('a level brings a toast; a pat brings hearts and affection', () => {
-  const { spinner, emit, toasts } = start({ theme: 'nyan' })
+  const { spinner, emit, toasts } = start()
   for (let i = 0; i < 2; i++) {
     emit('session.execution.started', { sessionID: S })
     emit('session.execution.succeeded', { sessionID: S })
   }
   expect(spinner.pet.xp).toBe(2)
-  expect(toasts).toEqual(['nyan reached Lv.2!'])
+  expect(toasts).toEqual(['Clawd reached Lv.2!'])
   const before = spinner.dockOf(S)!.id
   expect(spinner.patPet()).toBe(1)
   expect(spinner.pet.love).toBe(1)
@@ -176,35 +177,35 @@ test('a level brings a toast; a pat brings hearts and affection', () => {
   expect(spinner.dockOf(S)!.stats).toBe('Lv.2 ♥1')
 })
 
-test('switches and themes: off hides the pet, random keeps its draw, a choice is kept', () => {
+test('the footer toggle hides the pet, and is kept; companion off hides it too', () => {
   const { spinner } = start()
-  const drawnAtRandom = spinner.theme()
-  expect(spinner.choice()).toBe('random')
-  expect(drawnAtRandom).not.toBe('audio')
-  spinner.setSwitch('visible', false)
+  spinner.setVisible(false)
+  expect(spinner.prefs.visible).toBe(false)
   expect(spinner.dockOf(S)).toBe(null)
-  spinner.setSwitch('visible', true)
-  spinner.setSwitch('companion', false)
-  expect(spinner.dockOf(S)).toBe(null)
-  spinner.setSwitch('companion', true)
+  spinner.setVisible(true)
   expect(spinner.dockOf(S)).not.toBe(null)
-  expect(spinner.setChoice('dino')).toBe('dino')
-  expect(spinner.prefs.theme).toBe('dino')
-  expect(spinner.theme()).toBe('dino')
+  const quiet = start({ companion: false })
+  expect(quiet.spinner.dockOf(S)).toBe(null)
+  quiet.spinner.dispose()
 })
 
-test('the theme follows its option (an effect, so Solid must be reactive here)', () => {
-  const { spinner } = start({ theme: 'dino' })
-  expect(spinner.theme()).toBe('dino')
+test('each turn gets its own seed, from crypto with no sound', () => {
+  const { spinner, emit } = start()
+  emit('session.execution.started', { sessionID: S })
+  const first = spinner.run(S).seed
+  expect(spinner.lastSeed()).toEqual({ seed: first, from: 'random' })
+  emit('session.execution.succeeded', { sessionID: S })
+  emit('session.execution.started', { sessionID: S })
+  expect(spinner.run(S).seed).not.toBe(first)
 })
 
 test('reduced motion: every pet loop is one still frame', () => {
-  const { spinner } = start({ theme: 'clawd', reducedMotion: true })
+  const { spinner } = start({ reducedMotion: true })
   expect(spinner.dockOf(S)!.order).toEqual([0])
 })
 
 test('a malformed event is ignored, not thrown', () => {
-  const { spinner, emit } = start({ theme: 'clawd' })
+  const { spinner, emit } = start()
   const error = console.error
   console.error = () => {}
   try {
@@ -219,7 +220,7 @@ test('a malformed event is ignored, not thrown', () => {
 test('timers: the finale clears after FINALE_MS, the pet dozes off after five quiet minutes', () => {
   jest.useFakeTimers()
   try {
-    const { spinner, emit } = start({ theme: 'clawd' })
+    const { spinner, emit } = start()
     emit('session.execution.started', { sessionID: S })
     emit('session.execution.succeeded', { sessionID: S })
     expect(spinner.run(S).finale).not.toBe(null)
@@ -232,12 +233,76 @@ test('timers: the finale clears after FINALE_MS, the pet dozes off after five qu
     // A pat wakes it.
     spinner.patPet()
     expect(spinner.stateOf(S)).toBe('hello')
-    // A preview runs eight seconds.
-    spinner.showPreview('neon')
-    expect(spinner.preview()?.theme).toBe('neon')
-    jest.advanceTimersByTime(8001)
-    expect(spinner.preview()).toBe(null)
   } finally {
     jest.useRealTimers()
   }
+})
+
+const TRICKS = JSON.stringify({ tricks: [{ name: 'Git Push Grind', kind: 'grind', frames: ['tail'], points: 700 }] })
+const SCENES = JSON.stringify({ vignettes: [{ caption: 'Brewing', pose: 'work', colors: { A: '#7aa2f7' }, frames: [['AAAA', 'A..A']] }] })
+/** What a model would write for either prompt. */
+const reply = (prompt: string) => ({ text: prompt.includes('skateboarding') ? TRICKS : SCENES })
+
+test('the muse: asked at a turn\'s start with a seed and what the agent does; what it writes is kept', async () => {
+  const asked: { prompt: string; model: unknown }[] = []
+  const client = { generate: { text: async (input: { prompt: string; model: unknown }) => (asked.push(input), reply(input.prompt)) } }
+  const { spinner, emit } = start({ model: 'anthropic/claude-haiku-4-5' }, {}, client)
+  emit('session.execution.started', { sessionID: S })
+  expect(spinner.museState().isBusy).toBe(true)
+  await Bun.sleep(0)
+  expect(asked.length).toBe(1)
+  expect(asked[0]!.model).toEqual({ providerID: 'anthropic', id: 'claude-haiku-4-5' })
+  expect(asked[0]!.prompt).toContain(`Random seed ${spinner.lastSeed()!.seed}`)
+  const kept = () => spinner.muse().tricks.length + spinner.muse().vignettes.length
+  expect(kept()).toBe(1)
+  expect(spinner.museState()).toMatchObject({ isBusy: false, error: null, via: 'anthropic/claude-haiku-4-5', made: 1 })
+  // Asked lately: a tool call does not ask again.
+  emit('session.tool.input.started', { sessionID: S, id: 'c1', name: 'shell' })
+  emit('session.tool.called', { sessionID: S, id: 'c1', input: { command: 'bun test' } })
+  await Bun.sleep(0)
+  expect(asked.length).toBe(1)
+  // Forced, it asks for the kind it has fewer of, with the tool in the prompt.
+  await spinner.inspireNow(S)
+  expect(asked[1]!.prompt).toContain('shell: bun test')
+  expect(spinner.muse().tricks.length).toBe(1)
+  expect(spinner.muse().vignettes.length).toBe(1)
+})
+
+test('the muse: off without a model; the session by default; the free tier falls back to the session', async () => {
+  let direct = 0
+  const viaSession: string[] = []
+  const client = {
+    generate: { text: async () => (direct++, Promise.reject(new Error("Error from provider (Console): OpenCode's free tier can only be used from within OpenCode"))) },
+    session: { generate: async (input: { sessionID: string; prompt: string }) => (viaSession.push(input.sessionID), reply(input.prompt)) },
+  }
+  const off = start({}, {}, client)
+  off.emit('session.execution.started', { sessionID: S })
+  expect(off.spinner.museState().isBusy).toBe(false)
+  expect(off.spinner.inspireNow(S)).toBeNull()
+  off.spinner.dispose()
+  const byDefault = fake({ sound: false }, {}, client)
+  await byDefault.spinner.inspireNow(S)
+  expect([direct, viaSession.length]).toEqual([0, 1])
+  byDefault.spinner.dispose()
+
+  const { spinner } = start({ model: 'opencode/nemotron-3.5-lightning-free' }, {}, client)
+  await spinner.inspireNow(S)
+  expect([direct, viaSession.length]).toEqual([1, 2])
+  expect(spinner.museState().via).toBe('session')
+  // From then on straight through the session.
+  await spinner.inspireNow(S)
+  expect([direct, viaSession.length]).toEqual([1, 3])
+})
+
+test('the muse: a reply with nothing usable, or an error, is reported and drops nothing', async () => {
+  let answer: () => Promise<{ text: string }> = async () => ({ text: TRICKS + SCENES })
+  const client = { generate: { text: () => answer() } }
+  const { spinner } = start({ model: 'a/b' }, {}, client)
+  answer = async () => ({ text: 'Sorry, I cannot help with skateboarding.' })
+  await expect(spinner.inspireNow(S)!).rejects.toThrow('nothing usable')
+  expect(spinner.museState().error).toContain('nothing usable')
+  answer = () => Promise.reject(new Error('Model unavailable: a/b'))
+  await expect(spinner.inspireNow(S)!).rejects.toThrow('Model unavailable')
+  expect(spinner.muse().tricks.length + spinner.muse().vignettes.length).toBe(0)
+  expect(spinner.museState().isBusy).toBe(false)
 })

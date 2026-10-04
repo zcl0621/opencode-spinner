@@ -1,4 +1,4 @@
-// skate: Clawd at the skatepark, six rows (12 px) tall. The camera rides along
+// The skatepark (one of the show's two places, show.ts), six rows (12 px) tall. The camera rides along
 // with him past a park laid out at random: funbox pyramids, rails, stair sets
 // (gapped, or a handrail down them), drop-in decks, kickers and manual pads.
 // At each one he throws a random trick (kickflips, tre flips, grinds,
@@ -6,6 +6,7 @@
 // sometimes end in a bail.
 import { canvas, cells, draw, mod, noise, plot, put } from './cells'
 import type { Canvas, Grid } from './cells'
+import type { Muse } from './muse'
 import { glyphStars } from './scenes'
 import type { Act } from './themes'
 
@@ -138,13 +139,24 @@ function air(dx: number, x0: number, h0: number, x1: number, h1: number, apex: n
 const lerp = (dx: number, x0: number, h0: number, x1: number, h1: number) => h0 + ((h1 - h0) * (dx - x0)) / (x1 - x0)
 
 /** The obstacle in slot `i`, with its trick for this act. */
-export function obstacleAt(i: number, act: Act): Obstacle {
+export function obstacleAt(i: number, act: Act, muse?: Muse): Obstacle {
   const kinds: readonly Kind[] = ['pyramid', 'rail', 'stairs', 'handrail', 'kicker', 'manual']
   // Every fourth slot is a drop-in deck: the park's way down.
   const kind: Kind = mod(i, 4) === 0 ? 'drop' : kinds[Math.floor(noise(i * 7 + 1) * kinds.length)]!
   const pool = trickPool(act)
-  const trick = pool[Math.floor(noise(i * 31 + 7) * pool.length)]!
-  const grind = GRINDS[Math.floor(noise(i * 17 + 3) * GRINDS.length)]!
+  let trick = pool[Math.floor(noise(i * 31 + 7) * pool.length)]!
+  let grind = GRINDS[Math.floor(noise(i * 17 + 3) * GRINDS.length)]!
+  let manual: { name: string; points: number; board: Board } | null = null
+  // Tricks the muse wrote take most obstacles they fit.
+  if (muse && noise(i * 41 + 9) < 0.75) {
+    const pick = <T,>(list: readonly T[], seed: number) => (list.length ? list[Math.floor(noise(seed) * list.length)]! : null)
+    const air = pick(muse.tricks.filter(t => t.kind === 'flip' || t.kind === 'grab'), i * 43 + 1)
+    if (air) trick = { name: air.name, points: air.points, frames: air.frames, grab: air.kind === 'grab' }
+    const rail = pick(muse.tricks.filter(t => t.kind === 'grind'), i * 47 + 2)
+    if (rail) grind = { name: rail.name, points: rail.points, board: rail.frames[0]! }
+    const pad = pick(muse.tricks.filter(t => t.kind === 'manual'), i * 53 + 3)
+    if (pad) manual = { name: pad.name, points: pad.points, board: pad.frames[0]! }
+  }
   const isBail = trick.points >= 700 && noise(i * 53 + 5) < 0.2
 
   switch (kind) {
@@ -159,6 +171,7 @@ export function obstacleAt(i: number, act: Act): Obstacle {
     case 'manual': {
       const surface = (dx: number) => (dx >= 0 && dx < 14 ? 1 : 0)
       const nose = noise(i * 11) < 0.4
+      const m = manual ?? (nose ? { name: 'nose manual', points: 400, board: 'nose' as const } : { name: 'manual', points: 300, board: 'tail' as const })
       return {
         kind,
         len: 14,
@@ -166,9 +179,9 @@ export function obstacleAt(i: number, act: Act): Obstacle {
         ride: dx => {
           const up = arc(dx, -3, 0, 0, 1, 2)
           if (up) return { h: up.h, board: 'flat', pose: 'air' }
-          if (dx >= 0 && dx < 13) return { h: 1, board: nose ? 'nose' : 'tail', pose: 'grind', label: nose ? 'nose manual' : 'manual', points: nose ? 400 : 300 }
+          if (dx >= 0 && dx < 13) return { h: 1, board: m.board, pose: 'grind', label: m.name, points: m.points }
           const down = arc(dx, 13, 1, 17, 0, 2)
-          return down ? { h: down.h, board: 'flat', pose: 'air', label: nose ? 'nose manual' : 'manual', points: nose ? 400 : 300 } : null
+          return down ? { h: down.h, board: 'flat', pose: 'air', label: m.name, points: m.points } : null
         },
       }
     }
@@ -275,7 +288,13 @@ function drawRider(cv: Canvas, sx: number, ride: Ride): void {
 
 const pad = (n: number) => String(n).padStart(6, '0')
 
-export function skateScene(t: number, w: number, act: Act): Grid {
+/** Ticks of one run: from a drop-in deck to the next. */
+export const RUN_LENGTH = 4 * SLOT
+
+/** The skatepark: `SKATE_ROWS` rows. `salt` picks the park (a different layout per run). */
+export function skateScene(t: number, w: number, act: Act, muse?: Muse, salt = 0): Grid {
+  // Drop-in decks stay every fourth slot: the park shifts by whole runs.
+  const at = (k: number) => obstacleAt(k + salt * 4, act, muse)
   const cv = canvas(w, SKATE_ROWS)
   // He opens on the first drop-in deck.
   const s = t + RUN_UP + 6
@@ -285,13 +304,13 @@ export function skateScene(t: number, w: number, act: Act): Grid {
   for (let x = 0; x < w; x++) plot(cv, x, GROUND, mod(x + cam, 12) === 0 ? '#2a2e40' : '#3b3f51')
 
   const first = Math.floor((cam - RUN_UP - 30) / SLOT)
-  for (let i = first; i * SLOT + RUN_UP <= cam + w; i++) drawObstacle(cv, obstacleAt(i, act), i * SLOT + RUN_UP - cam)
+  for (let i = first; i * SLOT + RUN_UP <= cam + w; i++) drawObstacle(cv, at(i), i * SLOT + RUN_UP - cam)
 
   // His obstacle: the slot he is in (a ride may run on past it, into the next run-up).
   const i = Math.floor((s - RUN_UP) / SLOT)
-  const here = obstacleAt(i, act)
+  const here = at(i)
   const dx = s - (i * SLOT + RUN_UP)
-  const next = obstacleAt(i + 1, act)
+  const next = at(i + 1)
   const ride = here.ride(dx) ?? next.ride(s - ((i + 1) * SLOT + RUN_UP)) ?? { h: here.surface(dx), board: 'flat' as const, pose: 'ride' as const }
 
   if (ride.bail !== undefined) {
@@ -317,7 +336,7 @@ export function skateScene(t: number, w: number, act: Act): Grid {
   // The run's score: tricks landed since the last drop-in deck.
   let score = 0
   for (let k = i - mod(i, 4); k < i; k++) {
-    const ob = obstacleAt(k, act)
+    const ob = at(k)
     for (let d = -6; d < ob.len + 24; d += 2) {
       const r = ob.ride(d)
       if (r?.label === 'bail!') {
@@ -332,10 +351,10 @@ export function skateScene(t: number, w: number, act: Act): Grid {
   }
   // The trick's name rides to his right, clear of his head at the top of an air.
   const text = !ride.label ? '' : ride.label === 'bail!' ? 'BAIL!' : `${ride.label.toUpperCase()}${ride.points ? ` +${ride.points}` : ''}`
-  const at = Math.max(0, Math.min(sx + 10, w - text.length))
+  const labelX = Math.max(0, Math.min(sx + 10, w - text.length))
   const scoreText = `SCORE ${pad(score)}`
-  if (w >= 40 && (!text || at + text.length + 1 < w - scoreText.length)) put(g, w - scoreText.length, 0, scoreText, { c: '#565f89' })
-  if (text) put(g, at, 0, text, ride.label === 'bail!' ? { c: '#f7768e', b: true } : { c: '#ffd166', b: true })
+  if (w >= 40 && (!text || labelX + text.length + 1 < w - scoreText.length)) put(g, w - scoreText.length, 0, scoreText, { c: '#565f89' })
+  if (text) put(g, labelX, 0, text, ride.label === 'bail!' ? { c: '#f7768e', b: true } : { c: '#ffd166', b: true })
   if (act === 'ask' && ride.bail === undefined) {
     const row = Math.max(0, Math.floor((GROUND - 1 - Math.round(ride.h) - 6) / 2))
     put(g, sx + 8, row, '?', { c: '#ffd166', b: true })

@@ -1,7 +1,7 @@
-// The audio theme's tap: a small Swift program (audio-tap.swift) that reads the
-// system output through Core Audio and prints band levels 20 times a second.
-// Built with swiftc on first use into a cache folder, run only while the audio
-// theme's band can show. Nothing is recorded, written or sent.
+// The sound tap: a small Swift program (audio-tap.swift) that reads the system
+// output's band levels through Core Audio, 20 times a second, for the seed
+// (audio.ts). Built with swiftc on first use into a cache folder. Only levels
+// are read; nothing is recorded, written or sent.
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
 import { mkdir, rename, stat } from 'node:fs/promises'
@@ -9,7 +9,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { AUDIO_BANDS, AudioMeter, lineSplitter } from './audio'
+import { AUDIO_BANDS, SoundSeed, lineSplitter } from './audio'
 
 const SOURCE = fileURLToPath(new URL('./audio-tap.swift', import.meta.url))
 
@@ -30,7 +30,7 @@ function run(argv: string[]): Promise<{ code: number; stderr: string }> {
 
 /** The tap's binary, built from its source on first use (and again when the source is newer). */
 async function buildTap(): Promise<string> {
-  if (process.platform !== 'darwin') throw new Error('the audio theme reads system sound on macOS only')
+  if (process.platform !== 'darwin') throw new Error('the sound seed reads system sound on macOS only')
   const dir = cacheDir()
   const bin = path.join(dir, 'audio-tap')
   const [built, source] = await Promise.all([stat(bin).catch(() => null), stat(SOURCE)])
@@ -56,7 +56,7 @@ async function buildTap(): Promise<string> {
 export type TapStatus = { isAudible: boolean; error: string | null }
 
 /** Starts the tap: its lines into `meter`, `onStatus` told when sound starts or stops, or why it ended. */
-export function startTap(meter: AudioMeter, onStatus: (status: TapStatus) => void): { stop: () => void } {
+export function startTap(meter: SoundSeed, onStatus: (status: TapStatus) => void): { stop: () => void } {
   let isStopped = false
   let child: ChildProcess | undefined
   const fail = (error: string) => {

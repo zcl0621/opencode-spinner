@@ -1,18 +1,15 @@
-// Renders every theme (its working scene, its finale and its pet) into
-// assets/gallery.svg with the plugin's own drawing code: `bun scripts/gallery.ts`.
+// Renders Clawd's workbench vignettes (assets/clawd.svg) and his skatepark
+// tricks (assets/skate.svg) with the plugin's own drawing code:
+// `bun scripts/gallery.ts`.
 import { mkdirSync, writeFileSync } from 'node:fs'
 
 import { segments } from '../src/cells'
 import type { Grid } from '../src/cells'
-import { dockPetOf, petArtOf } from '../src/pets'
-import { THEMES, THEME_NAMES, finaleScene } from '../src/themes'
-import { VIGNETTES, vignetteAt } from '../src/clawd'
-import type { DockSeg } from '../src/types'
+import { VIGNETTES, benchScene, vignetteAt } from '../src/clawd'
+import { skateScene } from '../src/skate'
 
 const CW = 8
 const CH = 16
-const SCENE_W = 72
-const PET_GAP = 3
 const BG = '#0a0a0a'
 const FG = '#c0caf5'
 
@@ -44,39 +41,6 @@ function row(out: string[], runs: readonly Run[], x0: number, y: number): void {
 
 const gridRuns = (g: Grid): Run[][] => g.map(segments)
 
-const out: string[] = []
-let y = 1
-for (const name of THEME_NAMES) {
-  const theme = THEMES[name]
-  out.push(`<text x="${CW}" y="${y * CH + CH - 4}" fill="#7aa2f7" font-weight="bold">${name}</text>`)
-  y += 1
-  const scene = gridRuns(theme.scene(37, SCENE_W, 'tool'))
-  const pet = dockPetOf(petArtOf(name, theme.color), 'tool', { id: name, bubble: '', tone: 'plain', stats: '' })
-  const petRows: DockSeg[][] = pet.frames[pet.order[5] ?? 0] ?? []
-  const rows = Math.max(scene.length, petRows.length)
-  for (let r = 0; r < rows; r++) {
-    const sceneRow = scene[r - (rows - scene.length)]
-    if (sceneRow) row(out, sceneRow, 1, y + r)
-    const petRow = petRows[r - (rows - petRows.length)]
-    if (petRow) row(out, petRow, 1 + SCENE_W + PET_GAP, y + r)
-  }
-  y += rows
-  for (const finaleRow of gridRuns(finaleScene(theme, 'answer', 'Done · 12s', 9, SCENE_W))) row(out, finaleRow, 1, y++)
-  y += 1
-}
-
-const width = (SCENE_W + PET_GAP + 18) * CW
-const height = y * CH
-const svg = [
-  `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" font-family="Menlo, Monaco, 'DejaVu Sans Mono', monospace" font-size="13">`,
-  `<rect width="100%" height="100%" fill="${BG}" rx="8"/>`,
-  ...out,
-  '</svg>',
-].join('\n')
-mkdirSync(new URL('../assets', import.meta.url), { recursive: true })
-writeFileSync(new URL('../assets/gallery.svg', import.meta.url), svg)
-console.log(`assets/gallery.svg: ${THEME_NAMES.length} themes, ${width}×${height}`)
-
 // ---- clawd's vignettes: one frame of each, halfway in -------------------------
 
 const CASES: [Parameters<typeof vignetteAt>[2], string | undefined][] = [
@@ -97,7 +61,7 @@ for (const [act, tool] of CASES) {
   for (let t = 0; t < 60_000 && found.size < VIGNETTES.length; t++) {
     const now = vignetteAt(t, VW, act, tool)
     if (!now || found.has(now.vignette.name) || now.e !== 22) continue
-    found.set(now.vignette.name, THEMES.clawd.scene(t, VW, act, undefined, tool))
+    found.set(now.vignette.name, benchScene(t, VW, act, tool))
   }
 }
 const vout: string[] = []
@@ -136,10 +100,10 @@ for (const act of ['tool', 'think'] as const) {
   let since = 0
   let last: string | undefined
   for (let t = 0; t < 40_000 && shots.size < 18; t++) {
-    const label = labelOf(THEMES.skate.scene(t, SW, act))
+    const label = labelOf(skateScene(t, SW, act))
     since = label === last ? since + 1 : 0
     last = label
-    if (label && since === (label === 'BAIL!' ? 5 : 7) && !shots.has(label)) shots.set(label, THEMES.skate.scene(t, SW, act))
+    if (label && since === (label === 'BAIL!' ? 5 : 7) && !shots.has(label)) shots.set(label, skateScene(t, SW, act))
   }
 }
 const sout: string[] = []
