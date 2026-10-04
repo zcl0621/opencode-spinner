@@ -45,13 +45,15 @@ On by default. The plugin still draws every frame itself; the model only writes 
 
 **What plays meanwhile**: the request runs in the background while the show plays what is kept, or its own random content when nothing is. The animation never waits.
 
-**Where it is kept**: the latest 12 of each kind, in the plugin's storage (`~/.local/state/opencode/latest/tui/plugin.opencode-spinner.muse.json`), across restarts and shared by every opencode you have open.
+**Where it is kept**: the latest 500 of each kind, in the plugin's storage (`~/.local/state/opencode/latest/tui/plugin.opencode-spinner.muse.json`), across restarts and shared by every opencode you have open.
 
 **Which model**: the `model` option in `cli.json`:
 
 - unset, or `session` (the default): the current session's own model (`session.generate`). Nothing is added to the session's history, but its context goes along, so the content may be about your project and costs a few more tokens.
 - `provider/model-id`, such as `anthropic/claude-haiku-4-5`: that model, called directly (`generate.text`) with a short prompt and no session context. Pick the smallest, fastest one. `opencode models` lists the ids.
 - `false` or `"off"`: no model; the show plays its own random content.
+
+**Thinking**: this content needs no deep thought. With a `provider/model-id`, the plugin picks that model's lightest reasoning variant (the first of `none`, `off`, `minimal`, `low` it has; `/spinner status` shows which), or its default when it has none of those. Through `session` it is the session's own model and variant, which opencode's API doesn't let a plugin change; the prompt only asks it not to think long. Among opencode's free models, nemotron and others offer no variants at all.
 
 opencode's free models (`opencode/…-free`) refuse direct calls from plugins (the server says "free tier can only be used from within OpenCode"); on that error the plugin switches to `session` by itself.
 

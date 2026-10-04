@@ -8,7 +8,7 @@ import { createStore, produce } from 'solid-js/store'
 import { SoundSeed, seedFrom } from './audio'
 import type { Config } from './config'
 import { lang, m } from './i18n'
-import { activityOf, clawdPrompt, museNeed, parseModel, parseTricks, parseVignettes, skatePrompt } from './muse'
+import { activityOf, clawdPrompt, lightestVariant, museNeed, parseModel, parseTricks, parseVignettes, skatePrompt } from './muse'
 import type { Muse, MuseTrick, MuseVignette } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
 import type { News } from './pet'
@@ -29,7 +29,7 @@ const SLEEP_MS = 5 * 60_000
 /** A chance to ask the muse comes at most this often while turns run; it gives up after the timeout, and keeps this many of each kind. */
 const MUSE_EVERY_MS = 40_000
 const MUSE_TIMEOUT_MS = 300_000
-const MUSE_KEEP = 12
+const MUSE_KEEP = 500
 
 /** The muse's state, for `/spinner status`. */
 export type MuseState = { isBusy: boolean; error: string | null; via: string | null; at: number; made: number }
@@ -291,6 +291,22 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   const withTimeout = <T,>(p: Promise<T>, ms: number) =>
     Promise.race([p, new Promise<never>((_, reject) => later(ms, () => reject(new Error(`no reply in ${ms / 1000}s`))))])
 
+  // Each model's lightest reasoning variant, looked up once: the muse needs no long thinking.
+  const variants = new Map<string, string | undefined>()
+  async function variantOf(providerID: string, id: string): Promise<string | undefined> {
+    const key = `${providerID}/${id}`
+    if (!variants.has(key)) {
+      try {
+        const listed = await context.client.model.list()
+        const model = listed.data.find(m => m.providerID === providerID && m.id === id)
+        variants.set(key, lightestVariant((model?.variants ?? []).map(v => v.id)))
+      } catch {
+        variants.set(key, undefined)
+      }
+    }
+    return variants.get(key)
+  }
+
   /** One prompt to the muse's model; the text and the way it went. */
   async function askModel(prompt: string, sid: string): Promise<{ text: string; via: string }> {
     const pick = parseModel(modelText())
@@ -298,8 +314,9 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     const bySession = async () => ({ text: (await context.client.session.generate({ sessionID: sid, prompt })).text, via: 'session' })
     if (pick === 'session' || viaSession) return bySession()
     try {
-      const reply = await context.client.generate.text({ prompt, model: { providerID: pick.providerID, id: pick.id } })
-      return { text: reply.text, via: `${pick.providerID}/${pick.id}` }
+      const variant = await variantOf(pick.providerID, pick.id)
+      const reply = await context.client.generate.text({ prompt, model: { providerID: pick.providerID, id: pick.id, ...(variant ? { variant } : {}) } })
+      return { text: reply.text, via: `${pick.providerID}/${pick.id}${variant ? ` (${variant})` : ''}` }
     } catch (err) {
       // opencode's free models answer only inside a session: go through the session's own model.
       if (!/free tier|within opencode/i.test(String((err as Error)?.message ?? err))) throw err

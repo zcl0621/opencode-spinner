@@ -45,13 +45,15 @@ opencode 2.0 干活时，输入框上方会演一段像素小剧场：Claude 的
 
 **生成时演什么**：生成在后台进行，期间播放已经存下的内容，没有就用自带的随机内容，动画不会停下来等。
 
-**存在哪**：每类保留最近 12 条，存在插件存储里（`~/.local/state/opencode/latest/tui/plugin.opencode-spinner.muse.json`），重启后还在，同时开的几个 opencode 共用。
+**存在哪**：每类保留最近 500 条，存在插件存储里（`~/.local/state/opencode/latest/tui/plugin.opencode-spinner.muse.json`），重启后还在，同时开的几个 opencode 共用。
 
 **用哪个模型**：`cli.json` 的 `model` 选项：
 
 - 不填，或 `session`（默认）：借当前会话的模型（`session.generate`）。不会写进会话历史，但会带上会话上下文，所以内容可能跟你的项目有关，token 也耗得多一些。
 - `provider/model-id`，比如 `anthropic/claude-haiku-4-5`：直接调这个模型（`generate.text`），prompt 很短，不带会话上下文。建议选最小最快的。模型 id 可以用 `opencode models` 查。
 - `false` 或 `"off"`：关掉，只演自带的随机内容。
+
+**关于 thinking**：生成这点东西不需要深度思考。填了 `provider/model-id` 时，插件会自动选这个模型最轻的推理档位（`none`、`off`、`minimal`、`low` 里它有的第一个，`/spinner status` 会显示用了哪档）；模型没有档位就用它的默认。走 `session` 时用的是会话自己的模型和档位，opencode 的接口不让插件改，只能在 prompt 里叮嘱一句"不用多想"。opencode 的免费模型里，nemotron 这类根本没有档位可选。
 
 opencode 的免费模型（`opencode/…-free`）不让插件直接调用（服务端回 "free tier can only be used from within OpenCode"），遇到这个错误插件会自动改走 `session`。
 

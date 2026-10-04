@@ -25,6 +25,14 @@ export function parseModel(text: unknown): ModelPick | null {
   return { providerID: value.slice(0, slash), id: value.slice(slash + 1) }
 }
 
+/** Reasoning variants from least thinking to more: the muse takes the first a model has. */
+const LIGHT_VARIANTS = ['none', 'off', 'disabled', 'minimal', 'low']
+
+/** The variant that thinks least among a model's, or undefined (its default) when none is light. */
+export function lightestVariant(ids: readonly string[]): string | undefined {
+  return LIGHT_VARIANTS.find(v => ids.includes(v))
+}
+
 // ---- what it writes -----------------------------------------------------------
 
 export const BOARDS = ['flat', 'grip', 'under', 'graphic', 'end', 'tail', 'nose'] as const
@@ -78,7 +86,8 @@ export function seedLine(seed: number): string {
 const PREAMBLE =
   'You write content for a tiny pixel-art animation shown in a terminal while a coding agent works. ' +
   'Its star is Clawd, a small orange blocky mascot. This is a side job: ignore any earlier conversation ' +
-  'except as a theme, do not use tools, and reply with JSON only (no prose, no code fences).'
+  'except as a theme, do not use tools, and reply with JSON only (no prose, no code fences). ' +
+  'Answer right away: this needs no long thinking.'
 
 export function skatePrompt(activity: string, seed: number): string {
   return [

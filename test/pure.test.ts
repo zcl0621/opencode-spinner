@@ -5,7 +5,7 @@ import { expect, test } from 'bun:test'
 import { AUDIO_BANDS, SoundSeed, lineSplitter, parseTapLine, seedFrom } from '../src/audio'
 import { VIGNETTES, benchScene, museVignette, poolOf, toolKind, vignetteAt } from '../src/clawd'
 import { RUN_LENGTH, SKATE_ROWS, obstacleAt, skateScene } from '../src/skate'
-import { MUSE_LOW, PROP_H, PROP_W, activityOf, clawdPrompt, jsonOf, museNeed, parseModel, parseTricks, parseVignettes, seedLine, skatePrompt } from '../src/muse'
+import { MUSE_LOW, lightestVariant, PROP_H, PROP_W, activityOf, clawdPrompt, jsonOf, museNeed, parseModel, parseTricks, parseVignettes, seedLine, skatePrompt } from '../src/muse'
 import type { Muse } from '../src/muse'
 import { SHOW_ROWS, showScene, stretchAt } from '../src/show'
 import { parseCommand } from '../src/command'
@@ -251,6 +251,11 @@ test('muse: model ids, prompts, and replies read strictly', () => {
   expect(parseModel('anthropic/claude-haiku-4-5')).toEqual({ providerID: 'anthropic', id: 'claude-haiku-4-5' })
   expect(parseModel('openrouter/qwen/qwen3-8b')).toEqual({ providerID: 'openrouter', id: 'qwen/qwen3-8b' })
   expect(parseModel('session')).toBe('session')
+  expect(lightestVariant(['low', 'high', 'max'])).toBe('low')
+  expect(lightestVariant(['minimal', 'low', 'medium'])).toBe('minimal')
+  expect(lightestVariant(['high', 'max'])).toBeUndefined()
+  expect(lightestVariant([])).toBeUndefined()
+  expect(skatePrompt('thinking', 1)).toContain('no long thinking')
   for (const off of ['off', '', 'nope', '/x', 'x/', null, 3]) expect(parseModel(off)).toBeNull()
   expect(activityOf('tool', 'shell: bun test')).toContain('shell: bun test')
   expect(skatePrompt('thinking', 7)).toContain('"tricks"')

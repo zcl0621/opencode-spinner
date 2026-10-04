@@ -306,3 +306,21 @@ test('the muse: a reply with nothing usable, or an error, is reported and drops 
   expect(spinner.muse().tricks.length + spinner.muse().vignettes.length).toBe(0)
   expect(spinner.museState().isBusy).toBe(false)
 })
+
+test('the muse: a direct model is asked with its lightest reasoning variant, looked up once', async () => {
+  const asked: { model: unknown }[] = []
+  let lookups = 0
+  const client = {
+    model: { list: async () => (lookups++, { data: [{ providerID: 'x', id: 'thinker', variants: [{ id: 'high' }, { id: 'minimal' }, { id: 'low' }] }] }) },
+    generate: { text: async (input: { prompt: string; model: unknown }) => (asked.push(input), reply(input.prompt)) },
+  }
+  const { spinner } = start({ model: 'x/thinker' }, {}, client)
+  await spinner.inspireNow(S)
+  await spinner.inspireNow(S)
+  expect(asked.map(a => a.model)).toEqual([
+    { providerID: 'x', id: 'thinker', variant: 'minimal' },
+    { providerID: 'x', id: 'thinker', variant: 'minimal' },
+  ])
+  expect(lookups).toBe(1)
+  expect(spinner.museState().via).toBe('x/thinker (minimal)')
+})
