@@ -2,7 +2,7 @@
 
 [简体中文](README.md) · **English** · [Install guide for agents](AGENTS.md)
 
-While opencode 2.0 works, a small show plays above the prompt: a pixel side-scrolling shooter, Clawd, a pac-man chase, a rainbow cat, and more. A pet stands beside it, changing pose and speaking up as the agent thinks, runs tools and answers. When a turn ends, a burst of confetti shows how long it took. There are 15 themes; one of them draws whatever your Mac is playing as a live spectrum.
+While opencode 2.0 works, a small show plays above the prompt: a pixel side-scrolling shooter, Clawd, a pac-man chase, a rainbow cat, and more. A pet stands beside it, changing pose and speaking up as the agent thinks, runs tools and answers. When a turn ends, a burst of confetti shows how long it took. There are 16 themes; one of them draws whatever your Mac is playing as a live spectrum.
 
 This is a port of the `spinner` mod that [hoobnn/hoobnn-agent-mods](https://github.com/hoobnn/hoobnn-agent-mods/tree/main/claude-code/spinner) wrote for Claude Code (MIT). The themes, the pet and the drawing code are kept as they were; the parts that hook into the host were rewritten as an opencode 2.0 TUI plugin.
 
@@ -23,9 +23,11 @@ This is a port of the `spinner` mod that [hoobnn/hoobnn-agent-mods](https://gith
 
 ## Themes
 
-![The 15 themes: working scene, pet and finale](assets/gallery.svg)
+![The 16 themes: working scene, pet and finale](assets/gallery.svg)
 
 ![clawd's 20 vignettes](assets/clawd.svg)
+
+![skate: the tricks Clawd throws at the skatepark](assets/skate.svg)
 
 Pixel scenes (three rows of half-block pixels):
 
@@ -38,6 +40,13 @@ Pixel scenes (three rows of half-block pixels):
   - answering: the scroll, music notes floating up, painting; waiting on you: holding up a `?` sign.
 
   Each turn opens with Clawd already at work.
+- `skate` (six rows, taller than the rest): Clawd skates through a skatepark, the camera riding along. The park is laid out at random: drop-in decks (a curved drop off a high deck), funbox pyramids, flat rails, stair sets (some gapped, some with a handrail to grind down), kickers and manual pads. Every obstacle gets a random trick, its name and points popping up like in a skate game, with the run's score in the corner (reset at each drop-in):
+  - flips: ollie, kickflip, heelflip, 360 flip, varial flip, hardflip, laser flip, double kickflip, pop shove-it;
+  - grabs: melon, indy;
+  - grinds: 50-50, 5-0, boardslide, nosegrind, crooked, smith, feeble, with sparks;
+  - manuals, nose manuals and drop-ins.
+
+  Running a tool brings out the harder flips; thinking keeps to ollies and grabs. Hard tricks now and then end in a bail (BAIL!, points lost): Clawd hits the ground and the board rolls away without him.
 - `thunder`: a side-scrolling shooter. The fighter aims at waves of enemies, with explosions and a score; enemies come faster while a tool runs.
 - `chomp`: a pac-man chased by four ghosts until it eats a power pellet.
 - `sparky`: an electric mouse dashing along, cheeks crackling; lightning strikes while a tool runs.
@@ -115,12 +124,13 @@ With `language` set to `auto`, the plugin follows the system locale (`LC_ALL`, `
 bun install
 bun run typecheck
 bun run test            # = bun test --conditions browser
-bun scripts/gallery.ts  # regenerates assets/gallery.svg and assets/clawd.svg
+bun scripts/gallery.ts  # regenerates assets/gallery.svg, assets/clawd.svg and assets/skate.svg
 ```
 
 - `src/plugin.tsx`: the entry point. It claims UI slots (`session.composer.top` for the scene and pet, `prompt.footer.status` for the mascot on the progress line, `prompt.footer` for the toggle) and registers `/spinner`.
 - `src/spinner.tsx`: subscribes to opencode's events (`session.execution.*`, `session.tool.*`, `permission.*`, `form.*`) and keeps each session's state, the pet, the settings and the audio helper.
 - `src/clawd.ts`: the clawd scene and its 20 vignettes, picked by tool.
+- `src/skate.ts`: the skate scene: the park's obstacles, the tricks and the score.
 - `src/themes.ts`, `src/scenes.ts`, `src/pets.ts`, `src/cells.ts`: themes, scenes, pets and the cell grid, carried over from the original. `src/grid.tsx` draws a grid as OpenTUI text.
 - `src/audio.ts`, `src/audio-tap.swift`, `src/tap.ts`: the audio theme's level processing, the system-audio helper, and building and running it.
 - `src/i18n.ts`, `src/lang.ts`: messages in each language.

@@ -5,6 +5,7 @@ import { blank, frame, hsl, mod, noise, padTo, put, textWidth } from './cells'
 import type { Grid, Style } from './cells'
 import { SCENE_ROWS, bluecatScene, chompScene, nyanScene, sparkyScene, thunderScene } from './scenes'
 import { clawdScene } from './clawd'
+import { SKATE_ROWS, skateScene } from './skate'
 import { AUDIO_BANDS, demoView } from './audio'
 import type { AudioFeed } from './audio'
 
@@ -12,6 +13,7 @@ export * from './cells'
 
 export const THEME_NAMES = [
   'clawd',
+  'skate',
   'thunder',
   'chomp',
   'sparky',
@@ -487,6 +489,25 @@ export const THEMES: Record<ThemeName, Theme> = {
     confetti: ['✻', '✶', '✳', '·', '✢'],
     palette: [CLAUDE, '#e9b49a', '#f5e6d3', '#c15f3c'],
     scene: clawdScene,
+  },
+  skate: {
+    name: 'skate',
+    rows: SKATE_ROWS,
+    color: CLAUDE,
+    accent: '#e9b49a',
+    sprite: {
+      think: ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'].map(s => `▐▛█▜▌ ${s}`),
+      tool: ['▐▛█▜▌ ▭', '▐▛█▜▌ ▬', '▐▛█▜▌ ▮', '▐▛█▜▌ ▬'],
+      say: ['▐▛█▜▌ ✎  ', '▐▛█▜▌ ✎· ', '▐▛█▜▌ ✎··'],
+      wait: ['▐▛█▜▌ .  ', '▐▛█▜▌ .. ', '▐▛█▜▌ ...'],
+    },
+    happy: '▐▛█▜▌ ✻',
+    sad: '▐▀█▀▌',
+    dead: '▐x█x▌',
+    sleep: '▐▄█▄▌ zZ',
+    confetti: ['✻', '✶', '✳', '·', '✢'],
+    palette: [CLAUDE, '#e9b49a', '#f5e6d3', '#c15f3c'],
+    scene: skateScene,
   },
   thunder: {
     name: 'thunder',

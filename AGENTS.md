@@ -59,7 +59,7 @@ Commands (type them in the prompt; `/spinner` with no argument needs Enter twice
 | Command | Effect |
 | --- | --- |
 | `/spinner status` | Dialog: theme, pet level/xp/affection, theme list |
-| `/spinner <theme>` | Switch theme: `clawd` `thunder` `chomp` `sparky` `bluecat` `nyan` `cat` `bunny` `sakura` `mecha` `neon` `dino` `ocean` `matrix` `audio` |
+| `/spinner <theme>` | Switch theme: `clawd` `skate` `thunder` `chomp` `sparky` `bluecat` `nyan` `cat` `bunny` `sakura` `mecha` `neon` `dino` `ocean` `matrix` `audio` |
 | `/spinner random` | A random theme each time opencode starts (never `audio`) |
 | `/spinner theme` | Searchable theme picker |
 | `/spinner preview [theme]` | Play a theme above the prompt for 8 seconds |

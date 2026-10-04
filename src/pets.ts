@@ -290,6 +290,7 @@ export const AUDIO_PET: PetArt = {
 
 const PETS: Record<string, PetArt> = {
   clawd: CLAWD_PET,
+  skate: CLAWD_PET,
   thunder: THUNDER_PET,
   chomp: CHOMP_PET,
   sparky: SPARKY_PET,

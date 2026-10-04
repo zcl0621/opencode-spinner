@@ -122,3 +122,44 @@ writeFileSync(
   ].join('\n'),
 )
 console.log(`assets/clawd.svg: ${names.length} of ${VIGNETTES.length} vignettes`)
+
+// ---- skate: one frame of each trick the park throws, mid-trick ----------------
+
+const SW = 60
+const shots = new Map<string, Grid>()
+const labelOf = (g: Grid) => {
+  const text = g[0]!.map(c => c.ch).join('')
+  const m = text.match(/([A-Z0-9][A-Z0-9 -]*?(?: \+\d+)|BAIL!)/)
+  return m ? m[1]!.replace(/ \+\d+$/, '') : undefined
+}
+for (const act of ['tool', 'think'] as const) {
+  let since = 0
+  let last: string | undefined
+  for (let t = 0; t < 40_000 && shots.size < 18; t++) {
+    const label = labelOf(THEMES.skate.scene(t, SW, act))
+    since = label === last ? since + 1 : 0
+    last = label
+    if (label && since === (label === 'BAIL!' ? 5 : 7) && !shots.has(label)) shots.set(label, THEMES.skate.scene(t, SW, act))
+  }
+}
+const sout: string[] = []
+let sy = 1
+;[...shots].forEach(([name, g], i) => {
+  const col = i % 2
+  const top = 1 + Math.floor(i / 2) * 7
+  sout.push(`<text x="${(1 + col * (SW + 3)) * CW}" y="${top * CH + CH - 4}" fill="#7aa2f7" font-weight="bold">${esc(name.toLowerCase())}</text>`)
+  gridRuns(g).forEach((r, k) => row(sout, r, 1 + col * (SW + 3), top + 1 + k))
+  sy = Math.max(sy, top + 7)
+})
+const swidth = (SW * 2 + 5) * CW
+const sheight = sy * CH
+writeFileSync(
+  new URL('../assets/skate.svg', import.meta.url),
+  [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${swidth}" height="${sheight}" viewBox="0 0 ${swidth} ${sheight}" font-family="Menlo, Monaco, 'DejaVu Sans Mono', monospace" font-size="13">`,
+    `<rect width="100%" height="100%" fill="${BG}" rx="8"/>`,
+    ...sout,
+    '</svg>',
+  ].join('\n'),
+)
+console.log(`assets/skate.svg: ${shots.size} tricks`)

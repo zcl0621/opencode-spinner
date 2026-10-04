@@ -4,6 +4,7 @@ import { expect, test } from 'bun:test'
 
 import { AUDIO_BANDS, AudioMeter, lineSplitter, parseTapLine } from '../src/audio'
 import { VIGNETTES, poolOf, toolKind, vignetteAt } from '../src/clawd'
+import { SKATE_ROWS, obstacleAt } from '../src/skate'
 import { parseCommand } from '../src/command'
 import { readConfig } from '../src/config'
 import { parseLanguage, resolveLanguage } from '../src/lang'
@@ -221,4 +222,31 @@ test('clawd: a turn (tick 0) opens with him at work, for any width with room', (
   for (const w of [30, 47, 80, 120, 200]) {
     for (const act of ['think', 'tool', 'say', 'ask'] as const) expect(vignetteAt(0, w, act)).not.toBe(null)
   }
+})
+
+test('skate: every frame fills the width and its rows, at any width', () => {
+  for (const w of [12, 30, 61, 120]) {
+    for (const act of ['think', 'tool', 'ask', 'say'] as Act[]) {
+      for (let t = 0; t < 600; t += 3) {
+        const g = THEMES.skate.scene(t, w, act)
+        expect(g.length).toBe(SKATE_ROWS)
+        for (const row of g) expect(widthOf(row)).toBe(w)
+      }
+    }
+  }
+})
+
+test('skate: the park has every obstacle, he throws many tricks, and sometimes bails', () => {
+  const kinds = new Set<string>()
+  for (let i = 0; i < 200; i++) kinds.add(obstacleAt(i, 'tool').kind)
+  expect([...kinds].sort()).toEqual(['drop', 'handrail', 'kicker', 'manual', 'pyramid', 'rail', 'stairs'])
+  const labels = new Set<string>()
+  for (let t = 0; t < 20_000; t += 2) {
+    const top = THEMES.skate.scene(t, 100, 'tool')[0]!.map(c => c.ch).join('')
+    const m = top.match(/([A-Z0-9][A-Z0-9 -]*?) \+\d+|BAIL!/)
+    if (m) labels.add(m[1] ?? 'BAIL!')
+  }
+  for (const trick of ['KICKFLIP', '360 FLIP', 'HEELFLIP', 'POP SHOVE-IT', 'DROP IN', 'MANUAL', 'BAIL!']) expect(labels).toContain(trick)
+  expect([...labels].filter(l => /GRIND|SLIDE|5-0|50-50/.test(l)).length).toBeGreaterThan(3)
+  expect(labels.size).toBeGreaterThan(15)
 })

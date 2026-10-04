@@ -2,7 +2,7 @@
 
 **简体中文** · [English](README.en.md) · [给 agent 的安装指引](AGENTS.md)
 
-opencode 2.0 干活时，输入框上方会演一段小动画：像素风的横版射击、Clawd、吃豆人、彩虹猫……旁边还有一只宠物，跟着 agent 的动作换姿势、冒气泡。一轮结束放一小段彩带，显示这轮用了多久。共 15 套主题，其中一套把电脑正在播放的声音画成频谱。
+opencode 2.0 干活时，输入框上方会演一段小动画：像素风的横版射击、Clawd、吃豆人、彩虹猫……旁边还有一只宠物，跟着 agent 的动作换姿势、冒气泡。一轮结束放一小段彩带，显示这轮用了多久。共 16 套主题，其中一套把电脑正在播放的声音画成频谱。
 
 移植自 [hoobnn/hoobnn-agent-mods](https://github.com/hoobnn/hoobnn-agent-mods/tree/main/claude-code/spinner) 里给 Claude Code 写的 `spinner` mod（MIT）。主题、宠物和动画的绘制代码原样保留，接入 opencode 的部分重写成了 opencode 2.0 的 TUI 插件。
 
@@ -23,9 +23,11 @@ opencode 2.0 干活时，输入框上方会演一段小动画：像素风的横�
 
 ## 主题
 
-![15 套主题：工作场景、宠物和完成庆祝](assets/gallery.svg)
+![16 套主题：工作场景、宠物和完成庆祝](assets/gallery.svg)
 
 ![clawd 的 20 个小场景](assets/clawd.svg)
+
+![skate：Clawd 在板场里做的各种动作](assets/skate.svg)
 
 像素风场景（三行半格像素）：
 
@@ -38,6 +40,13 @@ opencode 2.0 干活时，输入框上方会演一段小动画：像素风的横�
   - 输出：写卷轴、哼歌（音符往上飘）、画画；等你确认：举着 `?` 牌子。
 
   每轮开始时 Clawd 已经在干活了，不用先等它走进场。
+- `skate`（六行，更高一些）：Clawd 在滑板场里一路滑过去，镜头跟着他走。场地随机排布：drop in 台（从高台弧面落下）、宝塔（funbox）、平杆、楼梯（有的直接飞过，有的带扶手杆可以沿着磨下去）、跳台和 manual 台。每个障碍都随机出一个动作，名字和分数像滑板游戏一样弹出来，右上角累计这一段的分数（每到 drop in 台清零）：
+  - 翻板：ollie、kickflip、heelflip、360 flip（tre flip）、varial flip、hardflip、laser flip、double kickflip、pop shove-it；
+  - 抓板：melon grab、indy grab；
+  - 磨杆：50-50、5-0、boardslide、nosegrind、crooked、smith、feeble，磨杆时冒火花；
+  - manual、nose manual，drop in。
+
+  跑工具时多出难的翻板，思考时以 ollie、抓板这类轻松动作为主。难动作偶尔会摔（BAIL!，扣分），人摔在地上，板自己滑走。
 - `thunder`：雷霆战机式横版射击，战机自动瞄准一波波敌机，有爆炸和计分；跑工具时敌机来得更快。
 - `chomp`：吃豆人被四只幽灵追着跑，直到吞下能量豆。
 - `sparky`：电气鼠一路冲过去，脸颊噼啪放电，跑工具时落下闪电。
@@ -115,12 +124,13 @@ git clone --depth 1 https://github.com/zcl0621/opencode-spinner ~/.config/openco
 bun install
 bun run typecheck
 bun run test          # = bun test --conditions browser
-bun scripts/gallery.ts  # 重新生成 assets/gallery.svg 和 assets/clawd.svg
+bun scripts/gallery.ts  # 重新生成 assets/gallery.svg、assets/clawd.svg 和 assets/skate.svg
 ```
 
 - `src/plugin.tsx`：插件入口，注册界面槽位（`session.composer.top` 放场景和宠物，`prompt.footer.status` 放进度行上的吉祥物，`prompt.footer` 放开关）和 `/spinner` 命令。
 - `src/spinner.tsx`：订阅 opencode 的事件（`session.execution.*`、`session.tool.*`、`permission.*`、`form.*`），维护每个会话的状态、宠物、设置和声音小程序。
 - `src/clawd.ts`：clawd 场景和它的 20 个小场景，按工具挑选。
+- `src/skate.ts`：skate 场景，板场障碍、动作和计分。
 - `src/themes.ts`、`src/scenes.ts`、`src/pets.ts`、`src/cells.ts`：主题、场景、宠物和字符网格，从原版原样搬来；`src/grid.tsx` 把网格画成 OpenTUI 文本。
 - `src/audio.ts`、`src/audio-tap.swift`、`src/tap.ts`：`audio` 主题的电平处理、读取系统音频的小程序和它的编译与启动。
 - `src/i18n.ts`、`src/lang.ts`：各语言文案。
