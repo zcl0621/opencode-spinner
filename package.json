@@ -1,0 +1,31 @@
+{
+  "name": "opencode-spinner",
+  "version": "0.1.0",
+  "description": "Pixel-art working animations and a companion pet for the opencode 2.0 TUI. A port of hoobnn's Claude Code spinner mod.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["opencode", "opencode-plugin", "tui", "spinner", "pet"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zcl0621/opencode-spinner.git"
+  },
+  "exports": {
+    "./tui": "./tui.tsx"
+  },
+  "files": ["tui.tsx", "src", "LICENSE", "README.md", "README.en.md"],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --conditions browser"
+  },
+  "peerDependencies": {
+    "@opencode/plugin": "2.0.22",
+    "@opentui/core": "^0.5.14",
+    "@opentui/solid": "^0.5.14",
+    "solid-js": "^1.9.15"
+  },
+  "devDependencies": {
+    "@opencode/theme": "2.0.22",
+    "@types/bun": "^1.4.2",
+    "typescript": "^7.0.2"
+  }
+}
