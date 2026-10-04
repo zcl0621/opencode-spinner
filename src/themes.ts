@@ -3,7 +3,8 @@
 // everything here is a function of the theme, the tick and the width.
 import { blank, frame, hsl, mod, noise, padTo, put, textWidth } from './cells'
 import type { Grid, Style } from './cells'
-import { SCENE_ROWS, bluecatScene, chompScene, clawdScene, nyanScene, sparkyScene, thunderScene } from './scenes'
+import { SCENE_ROWS, bluecatScene, chompScene, nyanScene, sparkyScene, thunderScene } from './scenes'
+import { clawdScene } from './clawd'
 import { AUDIO_BANDS, demoView } from './audio'
 import type { AudioFeed } from './audio'
 
@@ -56,8 +57,11 @@ export type Theme = {
   palette: string[]
   /** Rows the scene takes in the band. */
   rows: number
-  /** The band's scene while a turn runs: `rows` rows of `w` cells; `audio` feeds the audio theme. */
-  scene: (t: number, w: number, act: Act, audio?: AudioFeed) => Grid
+  /**
+   * The band's scene while a turn runs: `rows` rows of `w` cells. `audio` feeds
+   * the audio theme; `tool` (`shell: npm test`) lets a scene act out the tool.
+   */
+  scene: (t: number, w: number, act: Act, audio?: AudioFeed, tool?: string) => Grid
 }
 
 /** Milliseconds per frame: the mascot's, the band's, the companion's between turns. */

@@ -6,6 +6,7 @@ import { segments } from '../src/cells'
 import type { Grid } from '../src/cells'
 import { dockPetOf, petArtOf } from '../src/pets'
 import { THEMES, THEME_NAMES, finaleScene } from '../src/themes'
+import { VIGNETTES, vignetteAt } from '../src/clawd'
 import type { DockSeg } from '../src/types'
 
 const CW = 8
@@ -75,3 +76,49 @@ const svg = [
 mkdirSync(new URL('../assets', import.meta.url), { recursive: true })
 writeFileSync(new URL('../assets/gallery.svg', import.meta.url), svg)
 console.log(`assets/gallery.svg: ${THEME_NAMES.length} themes, ${width}×${height}`)
+
+// ---- clawd's vignettes: one frame of each, halfway in -------------------------
+
+const CASES: [Parameters<typeof vignetteAt>[2], string | undefined][] = [
+  ['tool', undefined],
+  ['tool', 'grep: x'],
+  ['tool', 'webfetch: x'],
+  ['tool', 'edit: x'],
+  ['tool', 'shell: x'],
+  ['tool', 'subagent: x'],
+  ['think', undefined],
+  ['say', undefined],
+  ['ask', undefined],
+  ['wait', undefined],
+]
+const VW = 44
+const found = new Map<string, Grid>()
+for (const [act, tool] of CASES) {
+  for (let t = 0; t < 60_000 && found.size < VIGNETTES.length; t++) {
+    const now = vignetteAt(t, VW, act, tool)
+    if (!now || found.has(now.vignette.name) || now.e !== 22) continue
+    found.set(now.vignette.name, THEMES.clawd.scene(t, VW, act, undefined, tool))
+  }
+}
+const vout: string[] = []
+let vy = 1
+const names = VIGNETTES.map(v => v.name).filter(n => found.has(n))
+names.forEach((name, i) => {
+  const col = i % 2
+  const top = 1 + Math.floor(i / 2) * 6
+  vout.push(`<text x="${(1 + col * (VW + 3)) * CW}" y="${top * CH + CH - 4}" fill="#7aa2f7" font-weight="bold">${name}</text>`)
+  gridRuns(found.get(name)!).forEach((r, k) => row(vout, r, 1 + col * (VW + 3), top + 1 + k))
+  vy = Math.max(vy, top + 6)
+})
+const vwidth = (VW * 2 + 5) * CW
+const vheight = vy * CH
+writeFileSync(
+  new URL('../assets/clawd.svg', import.meta.url),
+  [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${vwidth}" height="${vheight}" viewBox="0 0 ${vwidth} ${vheight}" font-family="Menlo, Monaco, 'DejaVu Sans Mono', monospace" font-size="13">`,
+    `<rect width="100%" height="100%" fill="${BG}" rx="8"/>`,
+    ...vout,
+    '</svg>',
+  ].join('\n'),
+)
+console.log(`assets/clawd.svg: ${names.length} of ${VIGNETTES.length} vignettes`)

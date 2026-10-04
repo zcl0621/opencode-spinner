@@ -368,6 +368,8 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     tap,
     rootOf,
     run,
+    /** The label of the tool a session runs now (the latest, subagents counted). */
+    toolOf: (sid: string) => busyLabel(Object.values(run(sid).running)),
     stateOf,
     dockOf,
     audioFeed,

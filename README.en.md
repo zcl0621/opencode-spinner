@@ -25,9 +25,19 @@ This is a port of the `spinner` mod that [hoobnn/hoobnn-agent-mods](https://gith
 
 ![The 15 themes: working scene, pet and finale](assets/gallery.svg)
 
+![clawd's 20 vignettes](assets/clawd.svg)
+
 Pixel scenes (three rows of half-block pixels):
 
-- `clawd`: Claude's mascot Clawd strolls by and stops to work, a starburst spinning beside it. It types on a laptop while a tool runs and shows a `?` when waiting for you.
+- `clawd`: Claude's mascot Clawd walks in (on foot, on a skateboard, or carrying a parcel), stops somewhere along the floor and gets to work. What he does there is drawn at random from 20 vignettes that fit what the agent is doing, switching every 4 seconds on long tasks:
+  - searching or reading: sweeping a magnifier over a page, reading a book, peering through a telescope;
+  - editing: typing at a laptop (code tokens bubble up), writing a scroll with a quill, painting, stacking code blocks;
+  - shell commands: hammering at an anvil, stirring a cauldron, turning gears, counting down a rocket launch;
+  - subagents: juggling, stacking a tower until it wobbles;
+  - thinking: thought bubbles, a light bulb flickering on, fishing (with the odd bite), a coffee, watering a plant until it flowers;
+  - answering: the scroll, music notes floating up, painting; waiting on you: holding up a `?` sign.
+
+  Each turn opens with Clawd already at work.
 - `thunder`: a side-scrolling shooter. The fighter aims at waves of enemies, with explosions and a score; enemies come faster while a tool runs.
 - `chomp`: a pac-man chased by four ghosts until it eats a power pellet.
 - `sparky`: an electric mouse dashing along, cheeks crackling; lightning strikes while a tool runs.
@@ -105,11 +115,12 @@ With `language` set to `auto`, the plugin follows the system locale (`LC_ALL`, `
 bun install
 bun run typecheck
 bun run test            # = bun test --conditions browser
-bun scripts/gallery.ts  # regenerates assets/gallery.svg
+bun scripts/gallery.ts  # regenerates assets/gallery.svg and assets/clawd.svg
 ```
 
 - `src/plugin.tsx`: the entry point. It claims UI slots (`session.composer.top` for the scene and pet, `prompt.footer.status` for the mascot on the progress line, `prompt.footer` for the toggle) and registers `/spinner`.
 - `src/spinner.tsx`: subscribes to opencode's events (`session.execution.*`, `session.tool.*`, `permission.*`, `form.*`) and keeps each session's state, the pet, the settings and the audio helper.
+- `src/clawd.ts`: the clawd scene and its 20 vignettes, picked by tool.
 - `src/themes.ts`, `src/scenes.ts`, `src/pets.ts`, `src/cells.ts`: themes, scenes, pets and the cell grid, carried over from the original. `src/grid.tsx` draws a grid as OpenTUI text.
 - `src/audio.ts`, `src/audio-tap.swift`, `src/tap.ts`: the audio theme's level processing, the system-audio helper, and building and running it.
 - `src/i18n.ts`, `src/lang.ts`: messages in each language.

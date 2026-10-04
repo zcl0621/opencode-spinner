@@ -103,15 +103,29 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
   })
 
   const petColumns = () => (pet() && !isCompact() ? pet()!.width + 1 + PET_LABEL_W : 0)
+  // Each scene plays from its own first frame: a turn, a finale, a preview.
+  const sceneKey = createMemo(() => {
+    const shown = s.preview()
+    if (shown) return `preview:${shown.id}`
+    const r = s.run(sid())
+    if (r.isTurn) return `turn:${r.started}`
+    return r.finale ? `finale:${r.finale.id}` : 'listen'
+  })
+  let keyed = ''
+  let base = 0
   const grid = createMemo(() => {
     const sc = scene()
     if (!sc) return null
     const theme = THEMES[sc.theme]
     // Two cells in on the left, one on the right, two between the scene and the pet's words.
     const w = Math.max(16, columns() - 5 - petColumns())
-    const tick = t()
+    if (sceneKey() !== keyed) {
+      keyed = sceneKey()
+      base = t()
+    }
+    const tick = t() - base
     if (sc.finale) return finaleScene(theme, sc.finale.kind, sc.finale.label, tick, w)
-    return theme.scene(tick, w, sc.act, s.audioFeed(sc.theme))
+    return theme.scene(tick, w, sc.act, s.audioFeed(sc.theme), s.toolOf(sid()))
   })
 
   return (

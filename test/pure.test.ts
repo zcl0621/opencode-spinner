@@ -3,6 +3,7 @@
 import { expect, test } from 'bun:test'
 
 import { AUDIO_BANDS, AudioMeter, lineSplitter, parseTapLine } from '../src/audio'
+import { VIGNETTES, poolOf, toolKind, vignetteAt } from '../src/clawd'
 import { parseCommand } from '../src/command'
 import { readConfig } from '../src/config'
 import { parseLanguage, resolveLanguage } from '../src/lang'
@@ -167,4 +168,57 @@ test('options and language', () => {
   expect(resolveLanguage('auto', undefined, [undefined, undefined, 'de_DE.UTF-8'])).toBe('de')
   expect(resolveLanguage('fr', undefined, ['zh_CN.UTF-8'])).toBe('fr')
   expect(resolveLanguage('auto', undefined, [])).toBe('en')
+})
+
+test('clawd: every vignette, walk and tool fills the width, every frame', () => {
+  const theme = THEMES.clawd
+  const tools = [undefined, 'shell: npm test', 'grep: TODO', 'edit: a.ts', 'webfetch: x.dev', 'subagent ×3', 'mystery']
+  const acts: Act[] = ['think', 'tool', 'ask', 'say', 'wait']
+  for (const w of [16, 30, 47, 80, 160]) {
+    for (let t = 0; t < 1200; t += 3) {
+      const scene = theme.scene(t, w, acts[t % acts.length]!, undefined, tools[t % tools.length])
+      expect(scene).toHaveLength(theme.rows)
+      for (const row of scene) expect(widthOf(row)).toBe(w)
+    }
+  }
+})
+
+test('clawd: tools pick fitting vignettes, and over many laps he does many things', () => {
+  expect(toolKind('shell: npm test')).toBe('shell')
+  expect(toolKind('grep: TODO')).toBe('search')
+  expect(toolKind('read')).toBe('search')
+  expect(toolKind('websearch: bun')).toBe('web')
+  expect(toolKind('edit: a.ts')).toBe('edit')
+  expect(toolKind('subagent ×3')).toBe('agent')
+  expect(toolKind(undefined)).toBe('other')
+  for (const act of ['think', 'tool', 'ask', 'say', 'wait'] as const) expect(poolOf(act).length).toBeGreaterThan(0)
+  expect(poolOf('tool', 'grep: x').map(v => v.name)).toContain('search')
+  expect(poolOf('ask').map(v => v.name)).toEqual(['sign'])
+
+  const seen = (act: Act, tool?: string) => {
+    const names = new Set<string>()
+    for (let t = 0; t < 40_000; t += 7) {
+      const now = vignetteAt(t, 80, act, tool)
+      if (now) names.add(now.vignette.name)
+    }
+    return names
+  }
+  expect(seen('tool').size).toBe(poolOf('tool').length)
+  expect(seen('tool', 'shell: make')).toEqual(new Set(poolOf('tool', 'shell: make').map(v => v.name)))
+  expect(seen('think').size).toBe(poolOf('think').length)
+  expect(seen('say').size).toBe(poolOf('say').length)
+  // Every vignette appears in some pool.
+  const pooled = new Set(
+    (['think', 'say', 'ask', 'wait'] as const)
+      .flatMap(act => poolOf(act))
+      .concat(['search', 'web', 'edit', 'shell', 'agent', 'other'].flatMap(k => poolOf('tool', k === 'other' ? undefined : `${k === 'search' ? 'grep' : k === 'web' ? 'webfetch' : k === 'agent' ? 'subagent' : k}: x`)))
+      .map(v => v.name),
+  )
+  expect([...pooled].sort()).toEqual(VIGNETTES.map(v => v.name).sort())
+})
+
+test('clawd: a turn (tick 0) opens with him at work, for any width with room', () => {
+  for (const w of [30, 47, 80, 120, 200]) {
+    for (const act of ['think', 'tool', 'say', 'ask'] as const) expect(vignetteAt(0, w, act)).not.toBe(null)
+  }
 })

@@ -25,9 +25,19 @@ opencode 2.0 干活时，输入框上方会演一段小动画：像素风的横�
 
 ![15 套主题：工作场景、宠物和完成庆祝](assets/gallery.svg)
 
+![clawd 的 20 个小场景](assets/clawd.svg)
+
 像素风场景（三行半格像素）：
 
-- `clawd`：Claude 的吉祥物 Clawd 散步路过，停下来干活，身边转着星芒；跑工具时敲笔记本，等你确认时头上冒 `?`。
+- `clawd`：Claude 的吉祥物 Clawd 走路、踩滑板或抱着包裹进场，在地板上随便找个地方停下来干活。干什么从 20 个小场景里随机抽，跟着 agent 正在做的事走，长任务里每 4 秒换一个：
+  - 搜索、读文件：拿放大镜扫文件、翻书、看望远镜；
+  - 改文件：敲笔记本（代码字符往上冒）、拿羽毛笔写卷轴、画画、码积木；
+  - 跑 shell：打铁冒火星、熬魔药、转齿轮、倒数发射火箭；
+  - 子代理：抛球杂耍、搭积木塔（搭满就晃）；
+  - 思考：冒思考泡泡、灯泡一闪一闪地亮、钓鱼（偶尔上钩）、喝咖啡、浇花等它开花；
+  - 输出：写卷轴、哼歌（音符往上飘）、画画；等你确认：举着 `?` 牌子。
+
+  每轮开始时 Clawd 已经在干活了，不用先等它走进场。
 - `thunder`：雷霆战机式横版射击，战机自动瞄准一波波敌机，有爆炸和计分；跑工具时敌机来得更快。
 - `chomp`：吃豆人被四只幽灵追着跑，直到吞下能量豆。
 - `sparky`：电气鼠一路冲过去，脸颊噼啪放电，跑工具时落下闪电。
@@ -105,11 +115,12 @@ git clone --depth 1 https://github.com/zcl0621/opencode-spinner ~/.config/openco
 bun install
 bun run typecheck
 bun run test          # = bun test --conditions browser
-bun scripts/gallery.ts  # 重新生成 assets/gallery.svg
+bun scripts/gallery.ts  # 重新生成 assets/gallery.svg 和 assets/clawd.svg
 ```
 
 - `src/plugin.tsx`：插件入口，注册界面槽位（`session.composer.top` 放场景和宠物，`prompt.footer.status` 放进度行上的吉祥物，`prompt.footer` 放开关）和 `/spinner` 命令。
 - `src/spinner.tsx`：订阅 opencode 的事件（`session.execution.*`、`session.tool.*`、`permission.*`、`form.*`），维护每个会话的状态、宠物、设置和声音小程序。
+- `src/clawd.ts`：clawd 场景和它的 20 个小场景，按工具挑选。
 - `src/themes.ts`、`src/scenes.ts`、`src/pets.ts`、`src/cells.ts`：主题、场景、宠物和字符网格，从原版原样搬来；`src/grid.tsx` 把网格画成 OpenTUI 文本。
 - `src/audio.ts`、`src/audio-tap.swift`、`src/tap.ts`：`audio` 主题的电平处理、读取系统音频的小程序和它的编译与启动。
 - `src/i18n.ts`、`src/lang.ts`：各语言文案。
