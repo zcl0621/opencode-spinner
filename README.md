@@ -1,150 +1,158 @@
-# opencode-spinner：opencode 干活时的 Clawd 小剧场
+# opencode-spinner
 
-**简体中文** · [English](README.en.md) · [给 agent 的安装指引](AGENTS.md)
+A little pixel show that plays above the prompt while opencode 2.0 works. Clawd, Claude's mascot, is busy at his workbench one moment and skating through a skatepark the next. A Clawd pet stands beside the show, changing pose and speaking up as the agent thinks, runs tools and answers. When a turn ends, a burst of confetti shows how long it took.
 
-opencode 2.0 干活时，输入框上方会演一段像素小剧场：Claude 的吉祥物 Clawd 一会儿在工作台前干活，一会儿去板场玩滑板。旁边还有一只 Clawd 宠物，跟着 agent 的动作换姿势、冒气泡。一轮结束放一小段彩带，显示这轮用了多久。
+A model writes much of what he does. While the agent runs `bun test`, Clawd may throw a `LINT GRIND +650` at the park or tinker with a prop the model drew. The random seed comes from whatever your Mac is playing, or from crypto when nothing is.
 
-演什么由模型现编：agent 在跑 `bun test` 时，Clawd 可能在板场里来一招 `LINT GRIND +650`，或者在工作台上摆弄一个模型画的道具。随机种子来自电脑正在放的声音，没声音就用系统随机数。
+It started from the `spinner` mod that [hoobnn/hoobnn-agent-mods](https://github.com/hoobnn/hoobnn-agent-mods/tree/main/claude-code/spinner) wrote for Claude Code (MIT), rewritten as an opencode 2.0 TUI plugin.
 
-起点是 [hoobnn/hoobnn-agent-mods](https://github.com/hoobnn/hoobnn-agent-mods/tree/main/claude-code/spinner) 给 Claude Code 写的 `spinner` mod（MIT），改写成了 opencode 2.0 的 TUI 插件。
+Installing it for someone? Agents can follow [INSTALL.md](INSTALL.md).
 
-![运行中：宠物气泡显示正在跑的命令](assets/opencode-working.svg)
+![Working: a model-written trick at the skatepark, the pet's bubble shows the command running](assets/opencode-working.svg)
 
-![一轮结束：彩带、用时，宠物报告测试通过](assets/opencode-done.svg)
+![A finished turn: confetti, the time taken, the pet reports passing tests](assets/opencode-done.svg)
 
-## 小剧场
+## The show
 
-一轮被切成一段一段，每段随机是下面两种之一，顺序由这一轮的种子决定，所以每轮都不一样。
+Each turn is cut into stretches. A stretch is either a visit to the workbench or a run through the skatepark, in an order the turn's seed picks, so no two turns look alike.
 
-**工作台**：Clawd 走着、踩着滑板或抱着包裹进场，找个地方停下来干活，干完离开。干什么从 20 个小场景里挑，跟着 agent 正在做的事走：搜索时拿放大镜、翻书、看望远镜；改文件时敲笔记本、写卷轴、画画、码积木；跑 shell 时打铁、熬魔药、转齿轮、发射火箭；子代理在跑时抛球杂耍、搭积木塔；思考时冒泡泡、亮灯泡、钓鱼、喝咖啡、浇花；等你确认时举着 `?` 牌子。模型画的道具也会混进来。
+At the workbench, Clawd walks in (on foot, on a skateboard, or carrying a parcel), stops somewhere, gets to work, then leaves. What he does comes from 20 vignettes that fit what the agent is doing: a magnifier, a book or a telescope while it searches; a laptop, a quill, paint or code blocks while it edits; an anvil, a cauldron, gears or a rocket launch while a shell command runs; juggling or a wobbling tower while subagents work; thought bubbles, a light bulb, fishing, coffee or a plant while it thinks; a `?` sign while it waits on you. Props the model drew are mixed in.
 
-![工作台的 20 个小场景](assets/clawd.svg)
+![The workbench's 20 vignettes](assets/clawd.svg)
 
-**板场**：镜头跟着 Clawd 滑过一段随机排布的板场：drop in 台、宝塔（funbox）、平杆、楼梯（有的直接飞过，有的带扶手杆可以磨下去）、跳台和 manual 台。每个障碍随机出一招，名字和分数像滑板游戏一样弹出来，右上角累计这一段的分数：
+At the skatepark, the camera rides along as Clawd skates past obstacles laid out at random: drop-in decks, funbox pyramids, flat rails, stair sets (some gapped, some with a handrail to grind down), kickers and manual pads. Every obstacle gets a trick, its name and points pop up like in a skate game, and the run's score adds up in the corner:
 
-- 翻板：ollie、kickflip、heelflip、360 flip、varial flip、hardflip、laser flip、double kickflip、pop shove-it；
-- 抓板：melon、indy；
-- 磨杆：50-50、5-0、boardslide、nosegrind、crooked、smith、feeble，磨的时候冒火花；
-- manual、nose manual、drop in；
-- 难的招式偶尔会摔（`BAIL!`，扣分）：人趴在地上，板子自己滑走。
+- flips: ollie, kickflip, heelflip, 360 flip, varial flip, hardflip, laser flip, double kickflip, pop shove-it
+- grabs: melon, indy
+- grinds, with sparks: 50-50, 5-0, boardslide, nosegrind, crooked, smith, feeble
+- manuals, nose manuals and drop-ins
+- now and then a hard trick ends in a bail (`BAIL!`, points lost): Clawd hits the ground and the board rolls away
 
-模型编的招式会占掉大部分障碍。
+The model's tricks take most of the obstacles.
 
-![板场里的各种招式](assets/skate.svg)
+![Tricks at the skatepark](assets/skate.svg)
 
-有权限请求或问题在等你时，不管在演哪段，Clawd 都会回到工作台举牌子。
+While a permission request or a question waits on you, Clawd goes back to his bench and holds up his sign, whatever was playing.
 
-## 模型现编内容
+## Content written by a model
 
-默认开启。动画还是插件在本地一帧帧画，模型只写内容（JSON），插件严格校验后才用，格式不对或者照抄示例的直接丢掉：
+This is on by default. The plugin still draws every frame itself. The model only writes content as JSON, and the plugin checks it strictly before use, dropping anything malformed or copied from the format example. It writes two kinds:
 
-- 板场招式：名字、怎么翻板、多少分，按 agent 正在做的事编（`HANDRAIL REPO GRIND`、`SYNTAX GRAB`）。
-- 工作台小场景：一个两帧的像素道具和一句字幕（用你设置的语言）。
+- skatepark tricks: a name, how the board turns, and points, made up about what the agent is doing (`HANDRAIL REPO GRIND`, `SYNTAX GRAB`)
+- workbench scenes: a pixel-art prop in two frames and a caption in your language
 
-**什么时候去找模型**：每轮开始时有一次机会，之后跑工具、思考时最多每 40 秒一次。每次机会先取一个随机种子：某一类内容存得不到 6 条就一定去生成（先补少的那类）；两类都够了，就由种子决定这次去不去（大约 35% 会去）。同一时间只有一个请求，最多等 5 分钟。
+### When it asks
 
-**生成时演什么**：生成在后台进行，期间播放已经存下的内容，没有就用自带的随机内容，动画不会停下来等。
+There is a chance at each turn's start, then at most every 40 seconds while tools run or the agent thinks. Each chance draws a seed. With fewer than 6 of a kind kept, it always asks, for the kind it has fewer of. With both kinds stocked, the seed decides whether to ask this time (about 35% of chances do). Only one request runs at a time, and it is given up after 5 minutes.
 
-**存在哪**：每类保留最近 500 条，存在插件存储里（`~/.local/state/opencode/latest/tui/plugin.opencode-spinner.muse.json`），重启后还在，同时开的几个 opencode 共用。
+The request runs in the background. Meanwhile the show plays what is kept, or its own random content when nothing is kept yet, so the animation never waits for the model.
 
-**用哪个模型**：`cli.json` 的 `model` 选项：
+The plugin keeps the latest 500 of each kind in its storage (`~/.local/state/opencode/latest/tui/plugin.opencode-spinner.muse.json`). They survive restarts and are shared by every opencode you have open.
 
-- 不填，或 `session`（默认）：借当前会话的模型（`session.generate`）。不会写进会话历史，但会带上会话上下文，所以内容可能跟你的项目有关，token 也耗得多一些。
-- `provider/model-id`，比如 `anthropic/claude-haiku-4-5`：直接调这个模型（`generate.text`），prompt 很短，不带会话上下文。建议选最小最快的。模型 id 可以用 `opencode models` 查。
-- `false` 或 `"off"`：关掉，只演自带的随机内容。
+### Which model
 
-**关于 thinking**：生成这点东西不需要深度思考。填了 `provider/model-id` 时，插件会自动选这个模型最轻的推理档位（`none`、`off`、`minimal`、`low` 里它有的第一个，`/spinner status` 会显示用了哪档）；模型没有档位就用它的默认。走 `session` 时用的是会话自己的模型和档位，opencode 的接口不让插件改，只能在 prompt 里叮嘱一句"不用多想"。opencode 的免费模型里，nemotron 这类根本没有档位可选。
+Set the `model` option in `cli.json`:
 
-opencode 的免费模型（`opencode/…-free`）不让插件直接调用（服务端回 "free tier can only be used from within OpenCode"），遇到这个错误插件会自动改走 `session`。
+- unset, or `session` (the default): the current session's own model, through `session.generate`. Nothing is added to the session's history, but the session's context goes along, so the content may be about your project and costs a few more tokens.
+- `provider/model-id`, such as `anthropic/claude-haiku-4-5`: that model, called directly through `generate.text` with a short prompt and no session context. Pick the smallest, fastest model you have. `opencode models` lists the ids.
+- `false` or `"off"`: no model. The show plays its own random content.
 
-实测（opencode 2.0.22，免费模型 `opencode/nemotron-3.5-lightning-free`，走 `session`）：一批板场招式大约 40 秒；一批工作台道具要 3 分半左右，而且这个免费模型基本照抄格式示例（会被丢掉）。配了 key 的小模型应该会快得多（我没有 key，没测过）。
+opencode's free models (`opencode/…-free`) refuse direct calls from plugins. The server answers "free tier can only be used from within OpenCode", and on that error the plugin switches to `session` by itself.
 
-## 随机种子：来自声音
+### Thinking
 
-在 macOS 上，插件会读系统正在播放的声音的各频段电平（只读电平，不录音、不存盘、不外传），用它们混出一个种子。种子决定这一轮先演什么、板场怎么排、要不要去找模型，也会写进给模型的 prompt（再由种子挑两个灵感词，比如"太空""甜点"），让每批内容都不一样。
+This content needs no deep thought. With a `provider/model-id`, the plugin picks that model's lightest reasoning variant: the first of `none`, `off`, `minimal` and `low` that the model has, or its default when it has none of those. `/spinner status` shows which one it used. Through `session`, the model and its variant are the session's own, and opencode's API doesn't let a plugin change them; the prompt only asks the model not to think long. Some of opencode's free models, nemotron among them, have no variants at all.
 
-没放歌、声音太小、不是 macOS、没装 `swiftc`、或者没给录音权限，都会改用系统随机数（`crypto`），功能照常。
+Measured on opencode 2.0.22 with the free `opencode/nemotron-3.5-lightning-free` through `session`: a batch of tricks took about 40 seconds, a batch of workbench props anywhere from 32 seconds to three and a half minutes, and one of its replies just copied the format example (such replies are dropped). A small model with your own key should be much faster, but I had none to measure.
 
-第一次用时插件会用 `src/audio-tap.swift` 编译一个小程序到 `~/.cache/opencode-spinner/`（约 2 秒，需要 macOS 14.2+ 和 `swiftc`，没有的话执行 `xcode-select --install`），macOS 会问一次是否允许终端录制系统音频。不想要可以设 `sound: false`。
+## The seed comes from sound
 
-## 宠物
+On macOS the plugin reads the band levels of whatever the system is playing and stirs them into a seed. It reads levels only; nothing is recorded, written or sent. The seed picks what the turn plays first, how the parks are laid out and whether to ask the model. It also goes into the model's prompt, along with two theme words it picks (like "space" and "desserts"), so each batch comes out different.
 
-- 按思考、调用工具、输出、等待切换姿势。气泡只说 opencode 自己的进度行没有的信息：正在跑的工具（`shell: npm test`、`edit: themes.ts`），或者有权限请求、问题在等你（`❯ 等你确认一下～`）。多个子代理并行时显示数量（`subagent ×3`）。agent 跑测试或提交时，它会说几秒钟（测试通过、测试没过、提交好了）。
-- 两轮之间留在原地（完成、被中断、出错，安静 5 分钟后打瞌睡）。每跑完一轮、每次测试通过、每次提交都涨经验升级（`Lv.4`）；点它或输入 `/spinner pet` 摸摸它（`♥12`，冒爱心）。等级和好感度跨会话保存，几个 opencode 养的是同一只。
-- 关掉宠物（`companion: false`）后，Clawd 会站到 opencode 自己的进度条前面（`▐▛█▜▌▭▭ ⬝⬝⬝■■ esc interrupt`）。
+With nothing playing, the sound too quiet, no macOS, no `swiftc`, or no recording permission, the seed comes from crypto and everything works the same.
 
-另外：一轮结束放彩带并显示用时（`▐▛█▜▌ ✻  完成 · 12s`），被中断是难过的脸，出错是一阵故障闪烁；不足 60 列或 20 行时小剧场收起，宠物缩成一行；输入框底栏的 **Spinner** 点一下开关全部动画。
+On first use the plugin compiles a small helper from `src/audio-tap.swift` into `~/.cache/opencode-spinner/`. That takes about 2 seconds and needs macOS 14.2+ and `swiftc` (from `xcode-select --install`). macOS then asks once whether your terminal may record system audio. Set `sound: false` to skip all of this.
 
-## 安装
+## The pet
 
-需要 **opencode 2.x**（在 2.0.22 上测试过）和支持真彩色的终端（Ghostty、iTerm2、WezTerm、kitty 等）。
+The pet changes pose for thinking, running a tool, answering and waiting. Its bubble only says what opencode's own progress line doesn't: the tool running (`shell: npm test`, `edit: themes.ts`), or a permission request or question waiting for you (`❯ Waiting for your OK~`). Subagents running side by side are counted (`subagent ×3`). When the agent runs tests or commits, the pet says so for a few seconds (tests passed, tests failed, committed).
 
-全局安装，把仓库克隆进 opencode 的插件目录，然后重启 opencode：
+Between turns it stays put: done, interrupted, error, and dozing after 5 quiet minutes. Every finished turn, passing test run and commit earns xp and levels (`Lv.4`). Click it, or type `/spinner pet`, to pat it (`♥12`, with floating hearts). Level and affection are kept across sessions, and every opencode you have open raises the same pet.
+
+With the pet turned off (`companion: false`), Clawd stands in front of opencode's own progress bar instead (`▐▛█▜▌▭▭ ⬝⬝⬝■■ esc interrupt`).
+
+A finished turn gets confetti and the time taken (`▐▛█▜▌ ✻  Done · 12s`), an interrupted one a sad face, an error a glitchy flicker. Under 60 columns or 20 rows the show steps aside and the pet shrinks to one line. The **Spinner** label in the prompt footer turns all animations off and on.
+
+## Install
+
+You need **opencode 2.x** (tested on 2.0.22) and a truecolor terminal such as Ghostty, iTerm2, WezTerm or kitty.
+
+To install it for every project, clone the repository into opencode's plugin folder, then restart opencode:
 
 ```bash
 git clone --depth 1 https://github.com/zcl0621/opencode-spinner ~/.config/opencode/plugins/opencode-spinner
 ```
 
-只想在某个项目里用，就克隆到项目的 `.opencode/plugins/opencode-spinner`。
+For a single project, clone it into that project's `.opencode/plugins/opencode-spinner` instead.
 
-要改选项（比如换模型），换一种装法：仓库克隆到任意位置，在 `~/.config/opencode/cli.json` 里写上绝对路径和选项（这时不要再放进插件目录）：
+Options need a different setup: clone the repository anywhere, then list its absolute path with the options in `~/.config/opencode/cli.json`, and don't also put it in a plugin folder:
 
 ```json
 {
   "plugins": [
-    { "package": "/Users/you/src/opencode-spinner", "options": { "model": "anthropic/claude-haiku-4-5", "language": "zh-Hans" } }
+    { "package": "/Users/you/src/opencode-spinner", "options": { "model": "anthropic/claude-haiku-4-5", "language": "en" } }
   ]
 }
 ```
 
-更新：`git -C <克隆的目录> pull`。卸载：删掉那个目录或 `cli.json` 里那一项。
+To update, run `git -C <clone folder> pull`. To uninstall, delete that folder or that entry in `cli.json`. [INSTALL.md](INSTALL.md) has the full steps, with checks and fixes.
 
-## 命令
+## Commands
 
-只有两个：
+There are two:
 
-- `/spinner status`（或只输入 `/spinner`）：宠物的等级和好感度、用的哪个模型、存了多少招式和小场景、上次的错误、种子现在从哪来。
-- `/spinner pet`：摸摸 Clawd。
+- `/spinner status` (or just `/spinner`): the pet's level and affection, the model, how many tricks and scenes are kept, the last error, and where the seed comes from now.
+- `/spinner pet`: pat Clawd.
 
-命令面板（`ctrl+p`）里也有 **Spinner** 和 **Spinner: pet Clawd**。
+The command palette (`ctrl+p`) also has **Spinner** and **Spinner: pet Clawd**.
 
-## 选项
+## Options
 
-写在 `cli.json` 那一项的 `options` 里，都可以不填：
+Set these under `options` in the plugin's `cli.json` entry. All are optional.
 
-| 选项 | 作用 | 默认 |
+| Option | What it does | Default |
 | --- | --- | --- |
-| `model` | 现编内容用的模型：`session`、`provider/model-id`，或 `false` 关掉 | `session` |
-| `sound` | 用声音出随机种子（macOS） | `true` |
-| `visible` | 全部动画的总开关（底栏的 **Spinner** 也能切换，切换结果会保存） | `true` |
-| `footerButton` | 输入框底栏的 **Spinner** 开关 | `true` |
-| `stage` | 输入框上方的小剧场 | `true` |
-| `celebrate` | 一轮结束时的庆祝动画 | `true` |
-| `companion` | 宠物 | `true` |
-| `reducedMotion` | 只画静止画面，仍随状态变化 | `false` |
-| `language` | 文字语言：`auto`、`en`、`zh-Hans`、`zh-Hant`、`ja`、`ko`、`es`、`fr`、`de`、`pt-BR`、`ru` | `auto` |
+| `model` | The model that writes content: `session`, `provider/model-id`, or `false` for none | `session` |
+| `sound` | Seed from the sound playing (macOS) | `true` |
+| `visible` | Master switch for all animations. The footer's **Spinner** toggles it too, and that choice is kept | `true` |
+| `footerButton` | The **Spinner** toggle in the prompt footer | `true` |
+| `stage` | The show above the prompt | `true` |
+| `celebrate` | The finale when a turn ends | `true` |
+| `companion` | The pet | `true` |
+| `reducedMotion` | Still frames only, still following the state | `false` |
+| `language` | Text language: `auto`, `en`, `zh-Hans`, `zh-Hant`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR`, `ru` | `auto` |
 
-`language` 为 `auto` 时跟随系统语言环境（`LC_ALL`、`LC_MESSAGES`、`LANG`），都没有时用英语。
+With `language` set to `auto`, the plugin follows the system locale (`LC_ALL`, `LC_MESSAGES`, `LANG`) and falls back to English.
 
-## 开发
+## Development
 
 ```bash
 bun install
 bun run typecheck
 bun run test            # = bun test --conditions browser
-bun scripts/gallery.ts  # 重新生成 assets/clawd.svg 和 assets/skate.svg
+bun scripts/gallery.ts  # regenerates assets/clawd.svg and assets/skate.svg
 ```
 
-- `src/plugin.tsx`：入口，注册界面槽位（`session.composer.top` 放小剧场和宠物，`prompt.footer.status` 放进度行上的 Clawd，`prompt.footer` 放开关）和 `/spinner`。
-- `src/spinner.tsx`：订阅 opencode 的事件（`session.execution.*`、`session.tool.*`、`permission.*`、`form.*`），维护每个会话的状态、种子、宠物，以及什么时候去找模型。
-- `src/show.ts`：把一轮切成工作台和板场两种片段。`src/clawd.ts`：工作台和 20 个小场景。`src/skate.ts`：板场、招式和计分。
-- `src/muse.ts`：给模型的 prompt、对返回内容的校验、要不要去找模型的判断。
-- `src/audio.ts`、`src/audio-tap.swift`、`src/tap.ts`：声音种子、读系统音频的小程序、它的编译和启动。
-- `src/themes.ts`、`src/scenes.ts`、`src/pets.ts`、`src/cells.ts`：Clawd 的外观和庆祝动画、共用的图层、宠物、字符网格；`src/grid.tsx` 把网格画成 OpenTUI 文本。
-- `src/i18n.ts`、`src/lang.ts`：各语言文案。
+- `src/plugin.tsx` is the entry point. It claims UI slots (`session.composer.top` for the show and the pet, `prompt.footer.status` for Clawd on the progress line, `prompt.footer` for the toggle) and registers `/spinner`.
+- `src/spinner.tsx` subscribes to opencode's events (`session.execution.*`, `session.tool.*`, `permission.*`, `form.*`) and keeps each session's state, the seed, the pet, and when to ask the model.
+- `src/show.ts` cuts a turn into workbench and skatepark stretches. `src/clawd.ts` draws the workbench and its 20 vignettes; `src/skate.ts` draws the park, the tricks and the score.
+- `src/muse.ts` holds the prompts, the strict reading of replies, and the decision whether to ask.
+- `src/audio.ts`, `src/audio-tap.swift` and `src/tap.ts` are the sound seed, the system-audio helper, and the code that builds and runs it.
+- `src/themes.ts`, `src/scenes.ts`, `src/pets.ts` and `src/cells.ts` hold Clawd's look and the finale, the shared layers, the pet, and the cell grid. `src/grid.tsx` draws a grid as OpenTUI text.
+- `src/i18n.ts` and `src/lang.ts` hold the messages in each language.
 
-注意：导入 `solid-js` 的文件必须是 `.tsx`。opencode 只对 `.tsx` 做模块重定向，`.ts` 文件会拿到另一份 Solid，界面就不会刷新。
+Any file that imports `solid-js` must be a `.tsx` file. opencode only redirects modules for `.tsx` files; a `.ts` file gets a second copy of Solid, and the UI stops updating.
 
-## 致谢
+## Credits
 
-宠物、工作台的画法和文案的底子来自 [hoobnn](https://github.com/hoobnn) 的 [hoobnn-agent-mods](https://github.com/hoobnn/hoobnn-agent-mods)（MIT）。本仓库同样是 MIT，见 [LICENSE](LICENSE)。
+The pet, the workbench art and the messages build on [hoobnn](https://github.com/hoobnn)'s [hoobnn-agent-mods](https://github.com/hoobnn/hoobnn-agent-mods) (MIT). This repository is also MIT; see [LICENSE](LICENSE).
