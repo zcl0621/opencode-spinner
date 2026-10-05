@@ -375,8 +375,14 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     const news = happenings.filter(h => Date.now() - h.at < NEWS_FRESH_MS).map(h => h.what)
     const prompt = skitPrompt(kind, tool, lang(), seed, storyOf(museOf(), news))
     setMuseState(s => ({ ...s, isBusy: true }))
-    return withTimeout(askModel(prompt, sid), MUSE_TIMEOUT_MS)
+    // A free model now and then sends back nothing at all: one more try then.
+    const ask = async () => {
+      const first = await askModel(prompt, sid)
+      return first.text.trim() ? first : askModel(prompt, sid)
+    }
+    return withTimeout(ask(), MUSE_TIMEOUT_MS)
       .then(({ text, via }) => {
+        if (!text.trim()) throw new Error('the model sent an empty reply, twice')
         const made = parseSkits(text, kind)
         if (made.length === 0) throw new Error(`nothing usable in the reply: ${text.slice(0, 80)}`)
         // Numbered against what is kept at the moment of writing (another window may have just added an episode).

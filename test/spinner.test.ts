@@ -363,3 +363,17 @@ test('several windows: only the one showing a session asks the muse and counts x
     here.spinner.dispose()
   }
 })
+
+test('the muse: an empty reply is asked again once; empty twice says so', async () => {
+  let calls = 0
+  const flaky = (empties: number) => ({ generate: { text: async (input: { prompt: string }) => (calls++ < empties ? { text: '  ' } : reply(input.prompt)) } })
+  const once = start({ model: 'anthropic/claude-haiku-4-5' }, {}, flaky(1))
+  await once.spinner.inspireNow(S)
+  expect(calls).toBe(2)
+  expect(once.spinner.muse().skits.length).toBe(2)
+  once.spinner.dispose()
+  calls = 0
+  const twice = start({ model: 'anthropic/claude-haiku-4-5' }, {}, flaky(2))
+  await expect(twice.spinner.inspireNow(S)!).rejects.toThrow('empty reply, twice')
+  expect(calls).toBe(2)
+})
