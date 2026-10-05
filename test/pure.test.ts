@@ -363,7 +363,7 @@ test('muse: model ids, prompts, and replies read strictly', () => {
       ],
       beats: [
         { do: 'carry', prop: 'ghost', secs: 99, effect: 'nuke', say: '<a line>' },
-        { do: 'teleport', secs: 2 },
+        { do: 'warp', secs: 2 },
         { do: 'throw', secs: 2, say: 'hi\nthere' },
         { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 },
       ],
@@ -407,7 +407,8 @@ test('the theater: every skit frame fills the width and rows, and it acts the be
 
 test('the theater: casts of Clawds act together, every action, place and effect, at any width', () => {
   const samples = parseSkits(JSON.stringify(SAMPLE_SKITS), 'think')
-  expect(samples.map(k => k.cast.length)).toEqual([3, 2, 2])
+  expect(samples.map(k => k.cast.length)).toEqual([3, 2, 2, 3])
+  expect(samples[3]!.moves!.map(m => m.name)).toEqual(['moonwalk', 'robot'])
   const band = samples[0]!
   expect(band.beats[0]!.acts.map(a => [a.who, a.do, a.prop])).toEqual([[0, 'strum', 'guitar'], [1, 'drum', 'drums'], [2, 'keys', 'keys']])
   const kungfu = samples[2]!
@@ -500,4 +501,46 @@ test('finale: every variant fills the width on six rows, and ids pick different 
     }
     expect(seen.size).toBe(count)
   }
+})
+
+test('muse: a skit can make up its own moves, checked like the rest, and the theater plays their poses', () => {
+  const reply = JSON.stringify({ skits: [{
+    title: 'Moonwalk',
+    cast: [{ name: 'A' }, { name: 'B' }],
+    moves: [
+      { name: 'Moonwalk', tempo: 2, effect: 'stars', frames: [{ left: 'up', right: 'down', legs: 'step', lift: 9, dx: -7 }, { left: 'down', right: 'up', legs: 'fly', flip: true, low: true, eyes: 'shades' }] },
+      { name: 'wave', frames: [{ left: 'up' }] },
+      { name: 'unused', frames: [{ left: 'up' }] },
+      { name: 'empty', frames: [] },
+    ],
+    beats: [
+      { secs: 2, acts: [{ who: 'A', do: 'moonwalk', to: 0.9, say: 'hee' }, { who: 'B', do: 'move', move: 'MOONWALK' }] },
+      { secs: 2, acts: [{ who: 'A', do: 'move', move: 'nope' }, { who: 'B', do: 'empty' }] },
+    ],
+  }] })
+  const [skit] = parseSkits(reply, 'think')
+  expect(skit!.moves!.map(m => m.name)).toEqual(['moonwalk'])
+  expect(skit!.moves![0]).toEqual({
+    name: 'moonwalk', tempo: 2, effect: 'stars',
+    frames: [
+      { left: 'up', right: 'down', legs: 'step', lift: 5, dx: -3, low: false, flip: false, eyes: null },
+      { left: 'down', right: 'up', legs: 'stand', lift: 0, dx: 0, low: true, flip: true, eyes: 'shades' },
+    ],
+  })
+  expect(skit!.beats[0]!.acts.map(a => [a.do, a.move])).toEqual([['move', 'moonwalk'], ['move', 'moonwalk']])
+  // An unknown move is a dance; a move with no poses is dropped, and so is its act.
+  expect(skit!.beats[1]!.acts.map(a => a.do)).toEqual(['dance'])
+  // The poses take turns, `tempo` ticks each.
+  const a0 = castAt(skit!, 0, 100)[0]!
+  const a2 = castAt(skit!, 2, 100)[0]!
+  expect([a0.left, a0.right, a0.lift, a0.isMirror]).toEqual(['up', 'down', 5, false])
+  expect([a2.left, a2.right, a2.isLow, a2.isMirror, a2.eyes]).toEqual(['down', 'up', true, true, 'shades'])
+  // With "to", he travels while doing it.
+  expect(castAt(skit!, 19, 100)[0]!.x).toBeGreaterThan(castAt(skit!, 1, 100)[0]!.x + 20)
+  for (const w of [16, 45, 97]) for (let t = 0; t < skitLength(skit!) + 5; t += 1) {
+    const g = skitScene(skit!, t, w, 1)
+    expect(g).toHaveLength(SHOW_ROWS)
+    for (const row of g) expect(widthOf(row)).toBe(w)
+  }
+  expect(skitPrompt('think', undefined, 'en', 1)).toContain('moves: 0 to 4 moves you invent')
 })

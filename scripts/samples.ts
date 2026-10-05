@@ -55,5 +55,29 @@ export const SAMPLE_SKITS = {
         { secs: 2, acts: [{ who: 'Clawd', do: 'highfive', with: 'Lint', say: 'LGTM' }] },
       ],
     },
+    {
+      title: 'Release party',
+      place: { backdrop: 'room', sky: 'none', weather: 'confetti', colors: { far: '#1f2335', near: '#3d2f5b', ground: '#2f2a3d', accent: '#ff8fab' } },
+      cast: [
+        { name: 'Clawd', color: '#d77757', look: { eyes: 'shades', colors: {}, hat: [], held: [] } },
+        { name: 'Mo', color: '#ff8fab', look: { eyes: 'happy', colors: { Y: '#ffd166' }, hat: ['..........YY....YY..........', '..........YYYYYYYY..........'], held: [] } },
+        { name: 'Dot', color: '#9ece6a', look: null },
+      ],
+      props: [
+        { id: 'camera', x: 0.9, motion: 'still', colors: { K: '#24283b', G: '#c0caf5', W: '#e9e4da' }, frames: [['..KK....', 'KKKKKKKK', 'KGGWWGGK', 'KGWKKWGK', 'KGGWWGGK', 'KKKKKKKK']] },
+        { id: 'ball', x: 0.8, motion: 'bob', colors: { R: '#f7768e', W: '#e9e4da' }, frames: [['.RRRR.', 'RRWRRR', 'RRRRRR', '.RRRR.']] },
+      ],
+      moves: [
+        { name: 'moonwalk', tempo: 3, frames: [{ left: 'out', right: 'down', legs: 'step', flip: true }, { left: 'down', right: 'out', legs: 'stand', flip: true, lift: 1 }] },
+        { name: 'robot', tempo: 3, effect: 'sparks', frames: [{ left: 'up', right: 'down' }, { left: 'mid', right: 'mid' }, { left: 'down', right: 'up' }, { left: 'mid', right: 'mid', low: true }] },
+      ],
+      beats: [
+        { secs: 3, acts: [{ who: 'Clawd', do: 'moonwalk', to: 0.2, say: 'shipped!' }, { who: 'Mo', do: 'clap' }, { who: 'Dot', do: 'juggle', prop: 'ball' }] },
+        { secs: 3, acts: [{ who: 'Clawd', do: 'lift', with: 'Mo', say: 'v2.0!' }, { who: 'Dot', do: 'photo', prop: 'camera', with: 'Mo' }] },
+        { secs: 3, acts: [{ who: 'Mo', do: 'waltz', with: 'Dot' }, { who: 'Clawd', do: 'robot', say: 'beep boop' }] },
+        { secs: 2, acts: [{ who: 'Clawd', do: 'teleport', to: 0, say: 'ta-da' }, { who: 'Mo', do: 'laugh' }, { who: 'Dot', do: 'salute' }] },
+        { secs: 2, acts: [{ who: 'Clawd', do: 'flip' }, { who: 'Mo', do: 'cheer' }, { who: 'Dot', do: 'kneel', with: 'Mo' }] },
+      ],
+    },
   ],
 }

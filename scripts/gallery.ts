@@ -113,6 +113,10 @@ const moments: [string, number, number][] = [
   ['eat, then a hug', 1, 75],
   ['punch: the other reels', 2, 45],
   ['chase', 2, 100],
+  ['a made-up move (moonwalk), juggle', 3, 14],
+  ['lift, photo', 3, 50],
+  ['waltz, a made-up robot dance', 3, 75],
+  ['flip, kneel', 3, 120],
 ]
 const sout: string[] = []
 let sy = 1

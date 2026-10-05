@@ -26,7 +26,7 @@ The show is six rows tall. It follows what the agent is doing, but holds each ki
 
 ### Skits
 
-A skit is a small script in JSON. The model writes it; the plugin checks it and draws every frame. Each skit has a title, a cast of one to three Clawds, a place, up to four props and two to ten beats.
+A skit is a small script in JSON. The model writes it; the plugin checks it and draws every frame. Each skit has a title, a cast of one to three Clawds, a place, up to four props, up to four moves of its own and two to ten beats.
 
 Each Clawd has a name, a body color and a look: eyes (happy, closed, dizzy, hearts, shades, stars), a hat and something to hold, drawn by the model in pixels, and now and then a holographic shimmer.
 
@@ -34,22 +34,24 @@ The place is a backdrop, something in the sky and some weather, in the model's c
 
 Props are pixel art the model draws: instruments, cars, food, animals, anything. They can bob, float, fall, spin, blink, shake, orbit, grow, dance, hop, pace, sway or flap, and keep an effect going, like notes over a jukebox or smoke over a pot.
 
-In each beat every Clawd can act at once; the ones with nothing to do turn to watch. They can:
+In each beat every Clawd can act at once; the ones with nothing to do turn to watch. There are 71 built-in actions:
 
-- walk, run, jump, fly, swim, or ride a prop while the world rolls by
-- wave, cheer, dance, bow, spin, sit, sleep, shiver, fall over, think, look at something, hide behind a prop
-- work, dig, paint, read, eat (the food shrinks), hold something up, cast a spell
-- strum a guitar, drum, blow a horn or play keys, each with its own arm moves
-- carry a prop overhead, throw it, push it, kick it
-- high-five, hug, chase or follow another Clawd, punch or kick him (he reels), throw him something (he catches it), or put a spell on him
+- move: walk, run, jump, sneak, march, crawl, roll, flip, fly, swim, teleport, or ride a prop while the world rolls by
+- strike a pose: wave, cheer, clap, point, nod, shake his head, salute, bow, spin, dance, sing, laugh, cry, stretch, think, look, sit, sleep, meditate (floating), shiver, panic, fall over, faint, kneel, hide behind a prop
+- use his hands: work, dig, paint, read, eat (the food shrinks), drink, hold something up, call on a phone, type, stir a pot, sweep, juggle, take a photo, climb on top of a prop, cast a spell
+- play music: strum a guitar, drum, blow a horn, play keys, each with its own arm moves
+- handle props: carry one overhead, throw it, push it, kick it
+- deal with another Clawd: high-five, hug, shake hands, argue, waltz, lift him overhead, scare him (he jumps), chase or follow him, punch or kick him (he reels), throw him something (he catches it), put a spell on him
+
+When none of those fits, the model can make up its own moves for a skit: a moonwalk, a robot dance, a victory stomp. A move is up to eight poses played in a loop, each setting both arms, the legs, how high he is off the floor, a nudge sideways, crouching, which way he faces and his eyes. The plugin checks every value and plays it like any other action, travelling across the stage if the act gives a destination.
 
 A beat can set off an effect (sparks, hearts, notes, zzz, steam, confetti, stars, bubbles, lightning, smoke, rain, `?`, `!`, an impact, dust, a thought bubble, tears, fire, wind), and any Clawd can say a line in your language. Many actions bring their own effect: notes for music, dust for running, an impact for a punch.
 
 To keep batches varied, each request asks for two very different skits and names a kind of scene from films, novels and shows to stage one of them like: a rock concert, a heist, a western showdown, a cooking show, a haunted house, a rom-com meet-cute, and 28 more.
 
-A skit runs 8 to 36 seconds. These three are hand-written samples (real ones come from the model):
+A skit runs 8 to 36 seconds. These four are hand-written samples (real ones come from the model); the last one uses two made-up moves:
 
-![Moments of three skits: a three-Clawd band, a road trip, a kung fu fight](assets/theater.svg)
+![Moments of four skits: a band, a road trip, a kung fu fight, a release party with a moonwalk](assets/theater.svg)
 
 ### The bench
 

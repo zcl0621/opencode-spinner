@@ -65,6 +65,8 @@ type ActorAt = {
   gaze: number
   eyes: MuseLook['eyes'] | null
   isMirror: boolean
+  /** Gone for a moment (teleporting). */
+  isHidden: boolean
 }
 /** An effect to set off, around a pixel spot (`x` centre, `y` top), `e` ticks in. */
 type Burst = { name: string; x: number; y: number; e: number }
@@ -87,9 +89,11 @@ const spot = (w: number, f: number) => f * Math.max(0, w - CLAWD_W)
 const AUTO: Partial<Record<SkitAct['do'], string>> = {
   sleep: 'zzz', strum: 'notes', drum: 'notes', blow: 'notes', keys: 'notes', fall: 'stars', think: 'thought', dig: 'dust',
   swim: 'bubbles', fly: 'wind', punch: 'impact', kick: 'impact', hug: 'hearts', highfive: 'sparks', cast: 'stars', run: 'dust',
+  cry: 'tears', sing: 'notes', panic: 'exclaim', faint: 'stars', teleport: 'sparks', kneel: 'hearts', stir: 'steam', sweep: 'dust',
+  photo: 'sparks', argue: 'exclaim', scare: 'exclaim', waltz: 'notes', laugh: 'sparks', meditate: 'stars',
 }
 
-const idle = (x: number): ActorAt => ({ x, lift: 0, left: 'out', right: 'out', legs: 'stand', isBlink: false, isLow: false, gaze: 0, eyes: null, isMirror: false })
+const idle = (x: number): ActorAt => ({ x, lift: 0, left: 'out', right: 'out', legs: 'stand', isBlink: false, isLow: false, gaze: 0, eyes: null, isMirror: false, isHidden: false })
 
 /** The skit's state at tick `e`: every beat before it played through, the current one partway. */
 function momentAt(skit: MuseSkit, e: number, w: number): Moment {
@@ -153,7 +157,8 @@ function momentAt(skit: MuseSkit, e: number, w: number): Moment {
         else if (hold === 'mouth') Object.assign(at, { x: me.x + CLAWD_W - 3, lift: FLOOR - (top() + 4) })
         else if (hold === 'hand') Object.assign(at, { x: me.x + CLAWD_W - 1 - size.w / 2, lift: FLOOR - (top() + 1) })
       }
-      const fx = act.effect !== 'none' ? act.effect : AUTO[act.do]
+      const move = act.do === 'move' ? skit.moves?.find(m => m.name === act.move) ?? null : null
+      const fx = act.effect !== 'none' ? act.effect : move ? (move.effect !== 'none' ? move.effect : undefined) : AUTO[act.do]
       const headBurst = (name = fx) => name && bursts.push({ name, x: me.x + CLAWD_W / 2, y: top(), e: local })
       if (act.say) lines.push({ who: i, say: act.say })
 
@@ -453,6 +458,320 @@ function momentAt(skit: MuseSkit, e: number, w: number): Moment {
           headBurst()
           break
         }
+        // ---- poses and moves without a prop
+        case 'clap':
+          ;[me.left, me.right] = mod(local, 4) < 2 ? ['mid', 'mid'] : ['out', 'out']
+          headBurst()
+          break
+        case 'point': {
+          const aim = at ? at.x + size.w / 2 : partner ? px0 + CLAWD_W / 2 : target !== null ? target + CLAWD_W / 2 : null
+          const left = aim !== null && aim < x0 + CLAWD_W / 2
+          me.gaze = aim === null ? 0 : left ? -1 : 1
+          if (left) me.left = 'mid'
+          else me.right = 'mid'
+          headBurst()
+          break
+        }
+        case 'nod':
+          ;[me.left, me.right] = ['down', 'down']
+          me.lift = mod(local, 6) < 3 ? -1 : 0
+          headBurst()
+          break
+        case 'refuse':
+          ;[me.left, me.right] = ['mid', 'mid']
+          me.gaze = mod(local, 4) < 2 ? -1 : 1
+          headBurst()
+          break
+        case 'laugh':
+          me.eyes = 'happy'
+          ;[me.left, me.right] = alt ? ['mid', 'mid'] : ['down', 'down']
+          me.lift = mod(local, 4) < 2 ? 1 : 0
+          headBurst()
+          break
+        case 'cry':
+          me.eyes = 'closed'
+          ;[me.left, me.right] = ['mid', 'mid']
+          me.x = fit(x0 + (mod(local, 4) < 2 ? 0.5 : 0))
+          headBurst()
+          break
+        case 'stretch':
+          ;[me.left, me.right] = p > 0.15 && p < 0.85 ? ['up', 'up'] : ['out', 'out']
+          me.lift = p > 0.3 && p < 0.7 ? 1 : 0
+          if (p > 0.3 && p < 0.7) me.eyes = 'closed'
+          headBurst()
+          break
+        case 'sneak':
+        case 'march':
+        case 'crawl':
+        case 'roll': {
+          const to = target ?? spot(w, x0 < w / 2 ? 0.75 : 0.15)
+          me.x = fit(lerp(x0, to, act.do === 'march' ? p : ease(p)))
+          const moving = p < 1 && Math.abs(to - x0) > 0.5
+          if (act.do === 'sneak') {
+            ;[me.left, me.right] = ['mid', 'mid']
+            me.legs = moving && mod(local, 8) < 4 ? 'step' : 'stand'
+            me.gaze = mod(local, 16) < 8 ? -1 : 1
+          } else if (act.do === 'march') {
+            ;[me.left, me.right] = alt ? ['up', 'down'] : ['down', 'up']
+            me.legs = moving && alt ? 'step' : 'stand'
+            me.lift = moving && alt ? 1 : 0
+          } else if (act.do === 'crawl') {
+            me.isLow = true
+            ;[me.left, me.right] = step ? ['mid', 'out'] : ['out', 'mid']
+          } else {
+            me.isLow = true
+            ;[me.left, me.right] = ['down', 'down']
+            if (moving) me.isMirror = mod(local, 4) < 2
+            me.eyes = moving ? 'dizzy' : null
+          }
+          headBurst()
+          break
+        }
+        case 'flip': {
+          // A somersault: up, turning over at the top, down.
+          const ph = mod(local, 12) / 12
+          me.lift = Math.round(Math.sin(Math.PI * ph) * 6)
+          me.isMirror = ph > 0.3 && ph < 0.7
+          me.isLow = ph > 0.35 && ph < 0.65
+          ;[me.left, me.right] = me.lift > 1 ? ['up', 'up'] : ['out', 'out']
+          headBurst()
+          break
+        }
+        case 'salute':
+          ;[me.left, me.right] = ['down', 'up']
+          headBurst()
+          break
+        case 'sing':
+          ;[me.left, me.right] = alt ? ['out', 'mid'] : ['mid', 'out']
+          me.lift = mod(local, 10) < 5 ? 1 : 0
+          me.eyes = mod(local, 20) < 10 ? 'closed' : null
+          if (fx) bursts.push({ name: fx, x: me.x + CLAWD_W / 2 + 3, y: top(), e: local })
+          break
+        case 'panic':
+          ;[me.left, me.right] = ['up', 'up']
+          me.eyes = 'dizzy'
+          me.x = fit(x0 + Math.sin(local * 0.5) * 4)
+          me.isMirror = Math.cos(local * 0.5) < 0
+          me.legs = step ? 'step' : 'stand'
+          me.lift = step ? 1 : 0
+          headBurst()
+          break
+        case 'faint':
+          if (p < 0.2) {
+            me.x = fit(x0 + (mod(local, 2) ? 0.5 : -0.5))
+            ;[me.left, me.right] = ['up', 'up']
+          } else {
+            me.isLow = true
+            me.eyes = 'closed'
+            ;[me.left, me.right] = ['out', 'out']
+            headBurst()
+          }
+          break
+        case 'meditate':
+          me.isLow = true
+          me.eyes = 'closed'
+          ;[me.left, me.right] = ['out', 'out']
+          me.lift = Math.round(1 + Math.min(1, p * 3) * 2 + Math.sin(local * 0.15))
+          if (mod(local, 30) < 15) headBurst()
+          break
+        case 'teleport': {
+          // Sparks, gone, then sparks where he lands.
+          const to = target ?? spot(w, x0 < w / 2 ? 0.8 : 0.1)
+          me.x = p < 0.4 ? x0 : fit(to)
+          me.isHidden = p >= 0.3 && p < 0.5
+          if (p < 0.3) me.x = fit(x0 + (mod(local, 2) ? 0.5 : -0.5))
+          if (fx && p < 0.5) bursts.push({ name: fx, x: x0 + CLAWD_W / 2, y: STAND_Y + 1, e: local })
+          if (fx && p >= 0.4 && p < 0.7) bursts.push({ name: fx, x: fit(to) + CLAWD_W / 2, y: STAND_Y + 1, e: local })
+          break
+        }
+        case 'kneel': {
+          const q = partner ? approach(besidePartner(1)) : at ? approach(besideProp()) : 1
+          if (q === null) break
+          me.isLow = true
+          const right = (partner ? px0 : at ? at.x : x0 + 1) > me.x
+          if (right) me.right = 'mid'
+          else me.left = 'mid'
+          me.gaze = right ? 1 : -1
+          if (partner && !busy.has(act.with!)) {
+            partner.eyes = q > 0.4 ? 'hearts' : null
+            partner.gaze = right ? -1 : 1
+          }
+          headBurst()
+          break
+        }
+        // ---- with a prop
+        case 'juggle': {
+          const q = approach(at!.hold ? x0 : centreOn())
+          if (q === null) break
+          // The prop goes round over his hands.
+          const ph = (local % 12) / 12
+          at!.hold = 'over'
+          Object.assign(at!, { x: me.x + CLAWD_W / 2 - size.w / 2 + Math.cos(ph * Math.PI * 2) * 4, lift: FLOOR - top() + Math.abs(Math.sin(ph * Math.PI * 2)) * 2 })
+          ;[me.left, me.right] = ph < 0.5 ? ['up', 'mid'] : ['mid', 'up']
+          me.gaze = Math.cos(ph * Math.PI * 2) < 0 ? -1 : 1
+          headBurst()
+          break
+        }
+        case 'stir':
+        case 'type': {
+          const q = approach(centreOn())
+          if (q === null) break
+          // Behind a pot or a keyboard, which stands in front of him.
+          at!.hold = 'front'
+          if (act.do === 'stir') {
+            me.left = 'down'
+            me.right = (['mid', 'out', 'down', 'out'] as const)[mod(Math.floor(local / 2), 4)]!
+          } else [me.left, me.right] = mod(local, 2) ? ['mid', 'down'] : ['down', 'mid']
+          if (fx) bursts.push({ name: fx, x: at!.x + size.w / 2, y: FLOOR - size.h, e: local })
+          break
+        }
+        case 'drink':
+        case 'call': {
+          const q = approach(at!.hold ? x0 : besideProp())
+          if (q === null) break
+          me.right = 'mid'
+          holdAt('mouth')
+          if (act.do === 'drink') {
+            me.lift = mod(local, 20) < 10 ? 0 : 1
+            me.eyes = mod(local, 20) < 10 ? 'closed' : 'happy'
+          } else me.gaze = mod(local, 24) < 12 ? -1 : 1
+          headBurst()
+          break
+        }
+        case 'sweep': {
+          const q = approach(besideProp())
+          if (q === null) break
+          const to = target ?? spot(w, me.x < w / 2 ? 0.75 : 0.1)
+          me.x = fit(lerp(me.x, to, ease(q)))
+          me.legs = step ? 'step' : 'stand'
+          ;[me.left, me.right] = alt ? ['mid', 'down'] : ['down', 'mid']
+          const sign = to >= x0 ? 1 : -1
+          at!.hold = 'front'
+          Object.assign(at!, { x: sign > 0 ? me.x + CLAWD_W - 2 + (alt ? 1 : 0) : me.x - size.w + 2 - (alt ? 1 : 0), lift: 0 })
+          if (fx) bursts.push({ name: fx, x: at!.x + size.w / 2, y: FLOOR - 1, e: local })
+          break
+        }
+        case 'climb': {
+          const q = approach(centreOn())
+          if (q === null) break
+          // Up the side, then standing on top.
+          const up = clamp01(q * 2.5)
+          me.lift = Math.round(size.h * up)
+          ;[me.left, me.right] = up < 1 ? (step ? ['up', 'mid'] : ['mid', 'up']) : alt ? ['up', 'up'] : ['out', 'out']
+          me.legs = up < 1 && step ? 'step' : 'stand'
+          if (up >= 1) headBurst()
+          break
+        }
+        case 'photo': {
+          const q = approach(at!.hold ? x0 : besideProp())
+          if (q === null) break
+          ;[me.left, me.right] = ['mid', 'mid']
+          holdAt('front')
+          Object.assign(at!, { lift: FLOOR - (top() + 5) })
+          const aim = partner ? px0 : null
+          if (aim !== null) me.gaze = aim < me.x ? -1 : 1
+          if (partner && !busy.has(act.with!)) {
+            ;[partner.left, partner.right] = q > 0.3 ? ['up', 'mid'] : ['out', 'out']
+            partner.eyes = 'happy'
+          }
+          // The flash.
+          if (fx && mod(local, 16) < 4) bursts.push({ name: fx, x: at!.x + size.w / 2, y: FLOOR - (top() + 5) - size.h, e: local })
+          break
+        }
+        // ---- with a partner
+        case 'handshake':
+        case 'argue': {
+          const q = approach(besidePartner(act.do === 'argue' ? 2 : 0), 0.4)
+          if (q === null) break
+          const right = px0 > me.x
+          const free = partner && !busy.has(act.with!)
+          if (act.do === 'handshake') {
+            const bob = mod(local, 4) < 2 ? 'mid' : 'out'
+            if (right) me.right = bob
+            else me.left = bob
+            if (free) {
+              if (right) partner!.left = bob
+              else partner!.right = bob
+            }
+          } else {
+            ;[me.left, me.right] = alt ? ['up', 'out'] : ['out', 'up']
+            me.lift = alt ? 1 : 0
+            if (free) {
+              ;[partner!.left, partner!.right] = alt ? ['out', 'up'] : ['up', 'out']
+              partner!.lift = alt ? 0 : 1
+            }
+            if (fx) bursts.push({ name: fx, x: (alt ? me.x : px0) + CLAWD_W / 2, y: STAND_Y, e: local })
+          }
+          me.gaze = right ? 1 : -1
+          if (free) partner!.gaze = right ? -1 : 1
+          break
+        }
+        case 'lift': {
+          const q = approach(px0, 0.4)
+          if (q === null) break
+          ;[me.left, me.right] = ['up', 'up']
+          if (partner && !busy.has(act.with!)) {
+            const up = clamp01(q * 3)
+            partner.x = me.x
+            partner.lift = Math.round(up * 5)
+            ;[partner.left, partner.right] = up >= 1 ? (alt ? ['up', 'up'] : ['out', 'out']) : ['out', 'out']
+            partner.eyes = 'happy'
+          }
+          headBurst()
+          break
+        }
+        case 'scare': {
+          const q = approach(besidePartner(1), 0.25)
+          if (q === null) break
+          ;[me.left, me.right] = ['up', 'up']
+          me.lift = q < 0.3 ? 1 : 0
+          if (partner && !busy.has(act.with!)) {
+            const away = px0 > me.x ? 1 : -1
+            partner.lift = Math.round(Math.max(0, Math.sin(Math.PI * clamp01(q * 2))) * 4)
+            partner.x = fit(px0 + away * Math.min(3, q * 6))
+            ;[partner.left, partner.right] = ['up', 'up']
+            partner.eyes = 'dizzy'
+            if (fx) bursts.push({ name: fx, x: partner.x + CLAWD_W / 2, y: STAND_Y - partner.lift, e: local })
+          } else headBurst()
+          break
+        }
+        case 'waltz': {
+          const q = approach(besidePartner(-2), 0.3)
+          if (q === null) break
+          const sway = Math.sin(local * 0.2) * 4
+          const right = px0 > x0
+          me.x = fit(me.x + sway)
+          if (right) me.right = 'mid'
+          else me.left = 'mid'
+          me.lift = mod(local, 6) < 3 ? 1 : 0
+          me.gaze = right ? 1 : -1
+          if (partner && !busy.has(act.with!)) {
+            partner.x = fit(me.x + (right ? CLAWD_W - 2 : -(CLAWD_W - 2)))
+            if (right) partner.left = 'mid'
+            else partner.right = 'mid'
+            partner.lift = me.lift
+            partner.eyes = 'happy'
+            partner.gaze = right ? -1 : 1
+          }
+          if (fx) bursts.push({ name: fx, x: me.x + CLAWD_W, y: STAND_Y - 1, e: local })
+          break
+        }
+        // ---- a move the model made up: its poses in a loop, travelling to "to" if given
+        case 'move': {
+          if (!move) break
+          const f = move.frames[mod(Math.floor(local / move.tempo), move.frames.length)]!
+          const base = target !== null ? lerp(x0, target, ease(p)) : x0
+          me.x = fit(base + f.dx)
+          me.left = f.left
+          me.right = f.right
+          me.legs = f.legs
+          me.lift = f.lift
+          me.isLow = f.low
+          me.isMirror = f.flip
+          me.eyes = f.eyes
+          headBurst()
+          break
+        }
       }
     }
     // The ones without an act look at whoever is doing something, and blink.
@@ -557,6 +876,7 @@ function drawProp(cv: Canvas, prop: SkitProp, at: PropAt, t: number, w: number):
 
 /** A Clawd at a moment: his pose, low when he sits, eyes turned where he looks. */
 function drawActor(cv: Canvas, skit: MuseSkit, i: number, a: ActorAt, t: number): void {
+  if (a.isHidden) return
   const actor = skit.cast[i]!
   const base = actor.look
   const look = base || a.eyes ? ({ ...(base ?? { hat: [], held: [], colors: {}, shiny: false, eyes: 'normal' }), ...(a.eyes ? { eyes: a.eyes } : {}) } as MuseLook) : null
@@ -696,7 +1016,9 @@ export function skitScene(raw: MuseSkit, t: number, w: number, seed = 0): Grid {
     const s = drawProp(cv, prop, at, t, w)
     if (s) spots.set(prop.id, s)
   }
-  const order = m.actors.map((_, i) => i).sort((a, b) => Number(m.lines.some(l => l.who === a)) - Number(m.lines.some(l => l.who === b)))
+  // Speakers in front; someone held up over another in front of him.
+  const rank = (i: number) => Number(m.lines.some(l => l.who === i)) + (m.actors[i]!.lift >= 3 ? 2 : 0)
+  const order = m.actors.map((_, i) => i).sort((a, b) => rank(a) - rank(b))
   for (const i of order) drawActor(cv, skit, i, m.actors[i]!, t)
   for (const prop of skit.props) {
     const at = m.props.get(prop.id)!

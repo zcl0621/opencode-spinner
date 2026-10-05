@@ -129,29 +129,63 @@ const CAST_COLORS = ['#7aa2f7', '#9ece6a', '#bb9af7']
 
 /**
  * What a Clawd does in a beat. Props: `carry`, `throw`, `push`, `ride`, the
- * instruments (`strum`, `drum`, `blow`, `keys`), `eat`, `read`, `hold`, `hide`
- * need one. Partners: `highfive`, `hug`, `chase`, `follow` need another
- * Clawd (`with`); `punch`, `kick`, `throw`, `cast`, `look` may take one.
+ * instruments (`strum`, `drum`, `blow`, `keys`), `eat`, `read`, `hold`, `hide`,
+ * `juggle`, `stir`, `type`, `drink`, `call`, `sweep`, `climb`, `photo` need
+ * one. Partners: `highfive`, `hug`, `chase`, `follow`, `handshake`, `argue`,
+ * `lift`, `scare`, `waltz` need another Clawd (`with`); `punch`, `kick`,
+ * `throw`, `cast`, `look`, `point`, `kneel`, `photo` may take one.
  */
 export const ACTIONS = [
   'walk', 'run', 'stand', 'jump', 'wave', 'cheer', 'dance', 'sit', 'sleep', 'look', 'bow', 'spin', 'shiver', 'fall', 'hide', 'think',
+  'clap', 'point', 'nod', 'refuse', 'laugh', 'cry', 'stretch', 'sneak', 'march', 'crawl', 'flip', 'roll', 'salute', 'sing', 'panic',
+  'faint', 'meditate', 'teleport', 'kneel',
   'work', 'dig', 'paint', 'read', 'eat', 'hold', 'cast', 'punch', 'kick',
+  'juggle', 'stir', 'type', 'drink', 'call', 'sweep', 'climb', 'photo',
   'strum', 'drum', 'blow', 'keys',
   'carry', 'throw', 'push', 'ride', 'fly', 'swim',
-  'highfive', 'hug', 'chase', 'follow',
+  'highfive', 'hug', 'chase', 'follow', 'handshake', 'argue', 'lift', 'scare', 'waltz',
 ] as const
-export type Action = (typeof ACTIONS)[number]
+/** A built-in action, or `move`: one of the skit's own moves (`SkitMove`). */
+export type Action = (typeof ACTIONS)[number] | 'move'
 /** What an action becomes when the prop or partner it needs is missing. */
 const WITHOUT_PROP: Partial<Record<Action, Action>> = {
   carry: 'walk', throw: 'stand', push: 'walk', ride: 'walk', strum: 'dance', drum: 'dance', blow: 'dance', keys: 'dance',
   eat: 'stand', read: 'think', hold: 'wave', hide: 'sit',
+  juggle: 'cheer', stir: 'work', type: 'work', drink: 'stand', call: 'think', sweep: 'walk', climb: 'jump', photo: 'point',
 }
-const WITHOUT_PARTNER: Partial<Record<Action, Action>> = { highfive: 'wave', hug: 'cheer', chase: 'run', follow: 'walk' }
+const WITHOUT_PARTNER: Partial<Record<Action, Action>> = {
+  highfive: 'wave', hug: 'cheer', chase: 'run', follow: 'walk', handshake: 'wave', argue: 'refuse', lift: 'cheer', scare: 'jump', waltz: 'dance',
+}
+
+export const ARMS = ['up', 'mid', 'out', 'down'] as const
+export const LEGS = ['stand', 'step', 'kick'] as const
+/** One pose of a move: arms, legs, how high he is, a nudge sideways, crouched, turned around, his eyes. */
+export type MoveFrame = {
+  left: (typeof ARMS)[number]
+  right: (typeof ARMS)[number]
+  legs: (typeof LEGS)[number]
+  /** Pixels off the floor, -1 (a dip) to 5. */
+  lift: number
+  /** Pixels sideways, -3 to 3. */
+  dx: number
+  low: boolean
+  flip: boolean
+  eyes: (typeof EYES)[number] | null
+}
+/**
+ * A move the model makes up for a skit (a moonwalk, a robot dance, a victory
+ * stomp): poses played in a loop, `tempo` ticks each. An act names it in `do`.
+ */
+export type SkitMove = { name: string; tempo: number; frames: MoveFrame[]; effect: (typeof EFFECTS)[number] }
+export const MAX_MOVES = 4
+export const MAX_MOVE_FRAMES = 8
 
 export type SkitAct = {
   /** Which Clawd (index in the cast). */
   who: number
   do: Action
+  /** With `do: 'move'`: the name of the skit's move. */
+  move?: string
   /** Where he goes (walk, carry, push...) or where a thrown prop lands, 0 to 1. */
   to: number | null
   prop: string | null
@@ -169,6 +203,8 @@ export type MuseSkit = {
   place: MusePlace | null
   cast: SkitActor[]
   props: SkitProp[]
+  /** Moves the model made up for this skit (absent in skits kept from before). */
+  moves?: SkitMove[]
   beats: SkitBeat[]
 }
 
@@ -244,9 +280,10 @@ const EXAMPLE = {
     { name: '<name>', color: '#7aa2f7', look: null },
   ],
   props: [{ id: 'lamp', x: 0.7, motion: 'bob', effect: 'none', colors: { B: '#7aa2f7', C: '#ffd166' }, frames: [['...CCCC...', '..CCCCCC..', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...'], ['....CC....', '...CCCC...', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...']] }],
+  moves: [{ name: '<move>', tempo: 3, effect: 'none', frames: [{ left: 'up', right: 'down', legs: 'step', lift: 1, dx: -1 }, { left: 'down', right: 'up', legs: 'stand', lift: 0, dx: 1, flip: true }] }],
   beats: [
     { secs: 2, acts: [{ who: 'Clawd', do: 'walk', to: 0.3 }, { who: '<name>', do: 'wave', say: '<a line>' }] },
-    { secs: 3, acts: [{ who: 'Clawd', do: 'highfive', with: '<name>', effect: 'sparks' }] },
+    { secs: 3, acts: [{ who: 'Clawd', do: 'highfive', with: '<name>', effect: 'sparks' }, { who: '<name>', do: '<move>' }] },
     { secs: 3, acts: [{ who: '<name>', do: 'carry', prop: 'lamp', to: 0.9 }, { who: 'Clawd', do: 'chase', with: '<name>', say: '<a line>' }] },
   ],
 }
@@ -266,7 +303,11 @@ export function skitPrompt(kind: Kind, detail: string | undefined, lang: Lang, s
     'Pixel rows: "." is empty, a color letter is a pixel; colors map 1 to 4 single uppercase letters to bright #rrggbb. Pixels are small (a Clawd is 28 × 14 of them), so draw with detail: outlines, highlights, recognizable shapes.',
     `beats: 2 to ${MAX_BEATS}, played in order; secs 1 to 6. Each beat has 1 to ${MAX_ACTS} acts done at the same time, one per Clawd (who: a cast name); Clawds without an act look on.`,
     `An act: do one of ${ACTIONS.join(', ')}; to (0 to 1) where he goes, or where a thrown prop lands; prop: the prop he acts on; with: the Clawd he acts with; effect one of ${EFFECTS.join(', ')}; say: a line.`,
-    'Meaning: carry lifts the prop overhead and takes it to "to"; throw hurls it in an arc (with a partner, the partner catches it); push shoves it along; ride gets in or on it (a car, a boat, a broom, a rocket) and the world rolls by; fly and swim move through the air or water; strum, drum, blow and keys play the prop as a string instrument, drums, a horn or a keyboard; eat, read and hold use it in his hands; hide ducks behind it; highfive, hug, chase and follow need with; punch and kick may hit a prop or a partner, who reels; cast throws magic at a prop or a partner.',
+    `moves: 0 to ${MAX_MOVES} moves you invent for this skit when no action fits (a moonwalk, a robot dance, a victory stomp, a sword lunge). Each has a name (one lowercase word, not an action's name), tempo 1 to 8 (tenths of a second a pose), an effect, and 1 to ${MAX_MOVE_FRAMES} poses played in a loop: left and right arm one of ${ARMS.join(', ')} (mid is held up in front); legs one of ${LEGS.join(', ')}; lift -1 to 5 pixels off the floor; dx -3 to 3 pixels sideways; low true to crouch; flip true to face the other way; eyes one of ${EYES.join(', ')} or null. An act does a move by its name in "do"; with "to" he travels while doing it.`,
+    'Meaning: carry lifts the prop overhead and takes it to "to"; throw hurls it in an arc (with a partner, the partner catches it); push shoves it along; ride gets in or on it (a car, a boat, a broom, a rocket) and the world rolls by; fly and swim move through the air or water; strum, drum, blow and keys play the prop as a string instrument, drums, a horn or a keyboard; eat, read and hold use it in his hands; hide ducks behind it; highfive, hug, chase and follow need with; punch and kick may hit a prop or a partner, who reels; cast throws magic at a prop or a partner. ' +
+      'More: clap, point (at a prop or partner), nod, refuse (shakes his head), laugh, cry, stretch, sneak and march and crawl and roll (move to "to"), flip (a somersault), salute, sing, panic, faint, meditate (floats cross-legged), teleport (vanishes, reappears at "to"), kneel (to a partner: a proposal). ' +
+      'With a prop: juggle it, stir it (a pot), type on it, drink it, call on it (a phone), sweep with it (a broom), climb on top of it, photo (snap a partner with a camera). ' +
+      'With a partner: handshake, argue, lift (holds him overhead), scare (he jumps), waltz (they dance together).',
   ].join('\n')
 }
 
@@ -459,8 +500,44 @@ function whoOf(v: unknown, cast: readonly SkitActor[]): number | null {
   return at >= 0 ? at : null
 }
 
-function readAct(item: Record<string, unknown>, cast: readonly SkitActor[], props: readonly SkitProp[]): SkitAct | null {
-  const action = ACTIONS.find(a => a === item.do)
+function readMoves(raw: unknown): SkitMove[] {
+  const out: SkitMove[] = []
+  const num = (v: unknown, lo: number, hi: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0)
+  for (const item of Array.isArray(raw) ? raw.slice(0, MAX_MOVES) : []) {
+    if (!isRecord(item)) continue
+    const name = typeof item.name === 'string' ? item.name.trim().toLowerCase().slice(0, 16) : ''
+    // A move may not take a built-in action's name, or another move's.
+    if (!name || (ACTIONS as readonly string[]).includes(name) || name === 'move' || out.some(m => m.name === name)) continue
+    const frames: MoveFrame[] = []
+    for (const f of Array.isArray(item.frames) ? item.frames.slice(0, MAX_MOVE_FRAMES) : []) {
+      if (!isRecord(f)) continue
+      frames.push({
+        left: oneOf(ARMS, f.left, 'out'),
+        right: oneOf(ARMS, f.right, 'out'),
+        legs: oneOf(LEGS, f.legs, 'stand'),
+        lift: num(f.lift, -1, 5),
+        dx: num(f.dx, -3, 3),
+        low: f.low === true,
+        flip: f.flip === true,
+        eyes: EYES.find(e => e === f.eyes) ?? null,
+      })
+    }
+    if (frames.length === 0) continue
+    out.push({ name, tempo: Math.max(1, Math.min(8, num(item.tempo, 1, 8) || 3)), frames, effect: oneOf(EFFECTS, item.effect, 'none') })
+  }
+  return out
+}
+
+function readAct(item: Record<string, unknown>, cast: readonly SkitActor[], props: readonly SkitProp[], moves: readonly SkitMove[] = []): SkitAct | null {
+  const said0 = typeof item.do === 'string' ? item.do.trim().toLowerCase() : ''
+  // One of the skit's own moves, named in `do` (or as `do: "move", move: name`).
+  const own = moves.find(m => m.name === said0) ?? (said0 === 'move' ? moves.find(m => m.name === String(item.move ?? '').trim().toLowerCase()) : undefined)
+  if (own) {
+    const who = whoOf(item.who, cast) ?? 0
+    const said = line(item.say, SAY_W) ?? ''
+    return { who, do: 'move', move: own.name, to: fraction(item.to), prop: null, with: null, effect: oneOf(EFFECTS, item.effect, 'none'), say: isPlaceholder(said) ? '' : said }
+  }
+  const action = ACTIONS.find(a => a === item.do) ?? (said0 === 'move' ? 'dance' : undefined)
   if (!action) return null
   const who = whoOf(item.who, cast) ?? 0
   const named = typeof item.prop === 'string' ? item.prop.trim().toLowerCase() : null
@@ -475,7 +552,7 @@ function readAct(item: Record<string, unknown>, cast: readonly SkitActor[], prop
   return { who, do: act, to: fraction(item.to), prop, with: withWho, effect: oneOf(EFFECTS, item.effect, 'none'), say: isPlaceholder(said) ? '' : said }
 }
 
-function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly SkitProp[]): SkitBeat[] {
+function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly SkitProp[], moves: readonly SkitMove[] = []): SkitBeat[] {
   const out: SkitBeat[] = []
   let total = 0
   for (const item of Array.isArray(raw) ? raw.slice(0, MAX_BEATS) : []) {
@@ -484,7 +561,7 @@ function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly Ski
     const list = Array.isArray(item.acts) ? item.acts : [item]
     const acts: SkitAct[] = []
     for (const a of list.slice(0, MAX_ACTS)) {
-      const act = isRecord(a) ? readAct(a, cast, props) : null
+      const act = isRecord(a) ? readAct(a, cast, props, moves) : null
       if (act && !acts.some(b => b.who === act.who)) acts.push(act)
     }
     if (acts.length === 0) continue
@@ -529,9 +606,12 @@ export function parseSkits(text: string, kind: Kind): MuseSkit[] {
     const cast = readCast(item)
     // Props copied from the format example (even with a few pixels changed) are not the model's own.
     const props = readProps(item.props).filter(p => !p.frames.some(f => EXAMPLE.props.some(e => e.frames.some(ef => alike(f, ef)))))
-    const beats = readBeats(item.beats, cast, props)
+    const moves = readMoves(item.moves)
+    const beats = readBeats(item.beats, cast, props, moves)
     if (beats.length < 2) continue
-    out.push({ kind, title, place: readPlace(item.place), cast, props, beats })
+    // Only the moves some act uses.
+    const used = moves.filter(m => beats.some(b => b.acts.some(a => a.move === m.name)))
+    out.push({ kind, title, place: readPlace(item.place), cast, props, ...(used.length > 0 ? { moves: used } : {}), beats })
   }
   return out
 }
