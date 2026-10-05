@@ -6,7 +6,7 @@ import { expect, test } from 'bun:test'
 import { AUDIO_BANDS, SoundSeed, lineSplitter, parseTapLine, seedFrom } from '../src/audio'
 import { canvas, cells, dot, octantBits, plot } from '../src/cells'
 import { VIGNETTES, benchScene, poolOf, toolKind, vignetteAt } from '../src/clawd'
-import { ACTIONS, BACKDROPS, CAPTION_W, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, museNeed, numberEpisodes, parseModel, parseSkits, seedLine, skitPrompt, storyOf } from '../src/muse'
+import { ACTIONS, BACKDROPS, CAPTION_W, EPISODE_EVERY_MS, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, episodeDue, museNeed, numberEpisodes, parseModel, parseSkits, seedLine, skitPrompt, storyOf } from '../src/muse'
 import type { Muse, MuseSkit } from '../src/muse'
 import { SHOW_ROWS, nextStage, showScene, stretchAt } from '../src/show'
 import { castAt, skitLength, skitScene } from '../src/stage'
@@ -584,6 +584,19 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   expect(prompt).toContain('Lately in the coding session: tests failed; a commit was made.')
   expect(prompt).toContain('a setup, then trouble or a twist')
   expect(skitPrompt('edit', undefined, 'en', 7, storyOf({ skits: [] }))).toContain('episode 1 of a new series')
+  expect(prompt).toContain('never mention episodes')
+
+  // A new episode is due when none was made lately: then every chance asks, whatever the seed.
+  const t0 = 4_000_000_000_000
+  const fresh = numberEpisodes(parseSkits(reply('Late', 'Bloop'), 'edit'), { skits: kept }, t0)
+  const withFresh = { skits: [...fresh, ...kept] }
+  expect(episodeDue({ skits: kept }, t0)).toBe(true)
+  expect(episodeDue(withFresh, t0 + EPISODE_EVERY_MS - 1)).toBe(false)
+  expect(episodeDue(withFresh, t0 + EPISODE_EVERY_MS)).toBe(true)
+  const lots = { skits: [...withFresh.skits, ...withFresh.skits, ...withFresh.skits] }
+  const asked = (now: number) => Array.from({ length: 100 }, (_, i) => museNeed(lots, 'edit', i * 256, now)).filter(Boolean).length
+  expect(asked(t0 + 1000)).toBeLessThan(100)
+  expect(asked(t0 + EPISODE_EVERY_MS)).toBe(100)
 
   // On stage: the episode in the title, the caption over its beat, at any width.
   const ep = kept[0]!

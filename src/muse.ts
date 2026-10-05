@@ -208,8 +208,9 @@ export type MuseSkit = {
   beats: SkitBeat[]
   /** What happened, in a sentence, so the next episode can follow on. */
   summary?: string
-  /** Its number in the series, when it is an episode (`numberEpisodes`). */
+  /** Its number in the series, when it is an episode (`numberEpisodes`), and when it was made (ms). */
   episode?: number
+  at?: number
 }
 
 /** What the show gets: the skits made so far, newest first. */
@@ -224,10 +225,14 @@ export const MAX_BEATS = 10
 export const MAX_ACTS = 3
 export const MAX_SECS = 36
 export const CAPTION_W = 28
-export const SUMMARY_W = 90
+/** The summary the prompt asks for, and what is kept (a little more, so one running long isn't cut). */
+export const SUMMARY_ASK = 120
+export const SUMMARY_W = 160
 /** Episodes the prompt recalls, and how long the session's news stays news. */
 export const RECALL = 3
 export const NEWS_FRESH_MS = 30 * 60_000
+/** After this long without a new episode, the next chance always asks for one. */
+export const EPISODE_EVERY_MS = 8 * 60_000
 
 /** A skit kept before casts and beats of several acts (one Clawd, a beat a deed) in today's shape. */
 export function upgradeSkit(skit: MuseSkit): MuseSkit {
@@ -315,7 +320,7 @@ export const nextEpisode = (muse: Muse) => Math.max(0, ...muse.skits.map(s => s.
  * The first skit of a reply is the series' next episode: it gets its number,
  * and the regulars it brings back keep their look when the model gave none.
  */
-export function numberEpisodes(made: readonly MuseSkit[], muse: Muse): MuseSkit[] {
+export function numberEpisodes(made: readonly MuseSkit[], muse: Muse, now = Date.now()): MuseSkit[] {
   if (made.length === 0) return []
   const regulars = storyOf(muse).cast
   const [first, ...rest] = made
@@ -323,7 +328,7 @@ export function numberEpisodes(made: readonly MuseSkit[], muse: Muse): MuseSkit[
     const regular = regulars.find(r => r.name.toLowerCase() === a.name.toLowerCase())
     return regular && !a.look ? { ...a, look: regular.look } : a
   })
-  return [{ ...first!, cast, episode: nextEpisode(muse) }, ...rest]
+  return [{ ...first!, cast, episode: nextEpisode(muse), at: now }, ...rest]
 }
 
 function storyLines(story: Story | undefined): string[] {
@@ -349,7 +354,7 @@ export function skitPrompt(kind: Kind, detail: string | undefined, lang: Lang, s
     ...storyLines(story),
     'Reply exactly in this shape (the values only show the format: invent your own):',
     JSON.stringify({ skits: [EXAMPLE] }),
-    `Rules. title, names, summary, every say and caption: in ${LANG_NAMES[lang]}; title and say at most ${TITLE_W} characters, names at most ${NAME_W}, a caption at most ${CAPTION_W}, the summary at most ${SUMMARY_W}; say may be "". summary: what happened, in one sentence, for the next episode to follow on. A beat may have a caption, the narrator's line shown over it ("Meanwhile...", "Three bugs later", "Plot twist!"): use a few, where they help the story.`,
+    `Rules. title, names, summary, every say and caption: in ${LANG_NAMES[lang]}; title and say at most ${TITLE_W} characters, names at most ${NAME_W}, a caption at most ${CAPTION_W}, the summary at most ${SUMMARY_ASK}; say may be "". summary: what happened, in one sentence, for the next episode to follow on. A beat may have a caption, the narrator's line shown over it ("Meanwhile...", "Three bugs later", "Plot twist!"): use a few, where they help the story. Captions and lines belong inside the story: never mention episodes, series, casts, skits or these rules in them.`,
     `place: backdrop one of ${BACKDROPS.join(', ')}; sky one of ${SKIES.join(', ')}; weather one of ${WEATHERS.join(', ')}; colors are #rrggbb on a dark terminal (far dim, near brighter, ground the floor, accent bright). place may be null.`,
     `cast: 1 to ${MAX_CAST} Clawds, each with a name, a body color #rrggbb (the first is usually Clawd, ${CLAWD_COLOR}) and a look or null. look (like Clawd's stickers: coffee, headphones, a wand, a crown, sunglasses...): eyes one of ${EYES.join(', ')}; shiny true for a holographic shimmer (rarely); hat 0 to ${HAT_H} rows of up to ${HAT_W} characters on the head; held 0 to ${HELD_H} rows of up to ${HELD_W} characters in a hand.`,
     `props: 0 to ${MAX_PROPS}, each with a short lowercase id, x from 0 (left) to 1 (right), motion one of ${MOTIONS.join(', ')}, an effect that keeps going around it (or "none"), and 1 to 3 frames of up to ${PROP_H} rows of up to ${PROP_W} characters. Props can be instruments, vehicles, food, tools, animals, signs, anything: draw them recognizable.`,
@@ -681,8 +686,15 @@ export const MUSE_CHANCE = 35
 /** The kept skits for a kind of work. */
 export const skitsFor = (muse: Muse | undefined, kind: Kind) => (muse?.skits ?? []).filter(s => s.kind === kind)
 
-/** Whether this chance asks the muse for skits for `kind`: always when few are kept, else as the seed says. */
-export function museNeed(muse: Muse, kind: Kind, seed: number): boolean {
+/** Whether the series is due a new episode at `now`: none yet, or none made in `EPISODE_EVERY_MS`. */
+export function episodeDue(muse: Muse, now: number): boolean {
+  const newest = Math.max(0, ...muse.skits.map(s => (s.episode !== undefined ? s.at ?? 0 : 0)))
+  return now - newest >= EPISODE_EVERY_MS
+}
+
+/** Whether this chance asks the muse for skits for `kind`: always when few are kept or (given `now`) the series is due, else as the seed says. */
+export function museNeed(muse: Muse, kind: Kind, seed: number, now?: number): boolean {
   if (skitsFor(muse, kind).length < MUSE_LOW) return true
+  if (now !== undefined && episodeDue(muse, now)) return true
   return (seed >>> 8) % 100 < MUSE_CHANCE
 }

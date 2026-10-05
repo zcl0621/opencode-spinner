@@ -49,7 +49,7 @@ A beat can set off an effect (sparks, hearts, notes, zzz, steam, confetti, stars
 
 Every skit is asked to tell a small story: a setup, then trouble or a twist (something breaks, a rival shows up, a plan goes wrong), then a fix or a punchline. A beat can carry a narrator's caption ("Later that night...", "Plot twist!"), shown at the top right while it plays.
 
-Skits also form a running series. The first skit of every batch is the next episode: the request recalls the last three episodes (each skit comes with a one-sentence summary) and the regular cast, and asks the model to pick up from there. Returning regulars keep their names, colors and outfits, and the title shows the episode number (`▸ Ep.5 ...`). The second skit of a batch stands on its own. What happened in your session in the last 30 minutes (tests failing or passing, commits, a turn that errored or was interrupted) goes into the request too, to become the episode's trouble, twist or ending. Episodes are written for different kinds of work, so the show may play them out of order.
+Skits also form a running series. The first skit of every batch is the next episode: the request recalls the last three episodes (each skit comes with a one-sentence summary) and the regular cast, and asks the model to pick up from there. Returning regulars keep their names, colors and outfits, and the title shows the episode number (`▸ Ep.5 ...`). The second skit of a batch stands on its own. What happened in your session in the last 30 minutes (tests failing or passing, commits, a turn that errored or was interrupted) goes into the request too, to become the episode's trouble, twist or ending. When no episode has been made for 8 minutes, the next chance always asks for one, so the story keeps moving while you work. Episodes are written for different kinds of work, so the show may play them out of order.
 
 To keep batches varied, each request asks for two very different skits and names a kind of scene from films, novels and shows to stage one of them like: a rock concert, a heist, a western showdown, a cooking show, a haunted house, a rom-com meet-cute, and 28 more.
 
@@ -111,7 +111,7 @@ On opencode 2.0.22 with the free `opencode/nemotron-3.5-lightning-free` through 
 
 ### When it asks
 
-There is a chance at the start of each turn, then at most every 40 seconds while the agent works. Each chance asks for skits about the work at that moment: always when fewer than 3 are kept for that kind of work, otherwise about 35% of the time. One request runs at a time, in the background, and is dropped after 5 minutes. The show never waits for it.
+There is a chance at the start of each turn, then at most every 40 seconds while the agent works. Each chance asks for skits about the work at that moment: always when fewer than 3 are kept for that kind of work or the series is due a new episode, otherwise about 35% of the time. One request runs at a time, in the background, and is dropped after 5 minutes. The show never waits for it.
 
 The latest 500 skits are kept in `~/.local/state/opencode/latest/tui/plugin.opencode-spinner.muse.json`. They survive restarts and are shared by every opencode you have open.
 

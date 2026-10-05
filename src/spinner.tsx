@@ -354,7 +354,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     const tool = busyLabel(Object.values(r.running)) || undefined
     // Skits for what the agent does now; an ask has none of its own.
     const kind = kindOf(r.act, tool) ?? 'think'
-    if (!isForced && !museNeed(museOf(), kind, seed)) return null
+    if (!isForced && !museNeed(museOf(), kind, seed, Date.now())) return null
     const news = happenings.filter(h => Date.now() - h.at < NEWS_FRESH_MS).map(h => h.what)
     const prompt = skitPrompt(kind, tool, lang(), seed, storyOf(museOf(), news))
     setMuseState(s => ({ ...s, isBusy: true }))
