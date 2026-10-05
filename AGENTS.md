@@ -4,7 +4,7 @@ To install, configure, update or remove this plugin for someone, follow [INSTALL
 
 ## What it is
 
-A TUI plugin for opencode 2.x. It draws Clawd's pixel show above the prompt (a default workbench scene, and skits a model writes about what the agent is doing, acted out by a small theater engine), a pet with a speech bubble, and a finale when a turn ends, and it registers `/spinner` (`status` and `pet` only). It adds no tools or agents. In the background it asks a model for skits (`src/muse.ts`), and on macOS it seeds its randomness from system sound (`src/audio.ts`, `src/tap.ts`).
+A TUI plugin for opencode 2.x. It draws Clawd's pixel show above the prompt (a default workbench scene, and skits a model writes about what the agent is doing, with a cast of up to three Clawds, acted out by a small theater engine in `src/stage.ts`), a pet with a speech bubble, and a finale when a turn ends, and it registers `/spinner` (`status` and `pet` only). It adds no tools or agents. In the background it asks a model for skits (`src/muse.ts`), and on macOS it seeds its randomness from system sound (`src/audio.ts`, `src/tap.ts`).
 
 ## Working on this repository
 
@@ -24,4 +24,5 @@ A TUI plugin for opencode 2.x. It draws Clawd's pixel show above the prompt (a d
   bun run test   # bun test --conditions browser (Solid's reactive build)
   ```
 
-- To try changes live, symlink the repo into a test project's `.opencode/plugins/` and run opencode there; plugins hot-reload on save. `bun scripts/gallery.ts` regenerates `assets/clawd.svg` and `assets/theater.svg` (a hand-written sample skit, fine pixels).
+- To try changes live, symlink the repo into a test project's `.opencode/plugins/` and run opencode there; plugins hot-reload on save. `bun scripts/gallery.ts` regenerates `assets/clawd.svg` and `assets/theater.svg` (the hand-written skits in `scripts/samples.ts`, which the tests also play, in fine pixels).
+- Kept skits outlive code changes: when the skit format changes, read old ones through `upgradeSkit` (muse.ts) rather than dropping them.

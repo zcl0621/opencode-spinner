@@ -26,6 +26,60 @@ export const CLAWD = {
   wave: ['..LLOOOOOOOO.O', '..OOEOOOOEOO.O', '..OOEOOOOEOOO.', 'OOOOOOOOOOOO..', '..OOOOOOOOOO..', '..DDDDDDDDDD..', '...D.D..D.D...'],
 }
 export const CLAWD_W = 14
+
+/** Where an arm is: raised, held up in front, out at his side, or lowered. */
+export type Arm = 'up' | 'mid' | 'out' | 'down'
+/** His legs: standing, mid-step, or one kicking out. */
+export type Legs = 'stand' | 'step' | 'kick'
+
+const poses = new Map<string, string[]>()
+/** A frame of Clawd with each arm where it says (`left` is the arm on screen left), for the theater. */
+export function poseArt(left: Arm, right: Arm, legs: Legs = 'stand', isBlink = false): readonly string[] {
+  const key = `${left}${right}${legs}${isBlink}`
+  const kept = poses.get(key)
+  if (kept) return kept
+  const rows = [
+    '..LLOOOOOOOO..',
+    isBlink ? '..OOOOOOOOOO..' : '..OOEOOOOEOO..',
+    '..OOEOOOOEOO..',
+    '..OOOOOOOOOO..',
+    '..OOOOOOOOOO..',
+    legs === 'kick' ? '..DDDDDDDDDDDD' : '..DDDDDDDDDD..',
+    legs === 'step' ? '..D.D....D.D..' : legs === 'kick' ? '...D.D..D.....' : '...D.D..D.D...',
+  ].map(r => [...r])
+  // Each arm's pixels for the left side; the right side mirrors them.
+  const ARM: Record<Arm, [number, number][]> = {
+    up: [[0, 0], [0, 1], [1, 2]],
+    mid: [[0, 2], [1, 2]],
+    out: [[0, 3], [1, 3]],
+    down: [[1, 3], [0, 4]],
+  }
+  for (const [x, y] of ARM[left]) rows[y]![x] = 'O'
+  for (const [x, y] of ARM[right]) rows[y]![CLAWD_W - 1 - x] = 'O'
+  const art = rows.map(r => r.join(''))
+  poses.set(key, art)
+  return art
+}
+
+/** A #rrggbb color scaled toward black (`by` < 1) or white (`by` > 1). */
+function shade(hex: string, by: number): string {
+  const n = Number.parseInt(hex.slice(1, 7), 16)
+  const ch = (v: number) => Math.round(by <= 1 ? v * by : v + (255 - v) * (by - 1)).toString(16).padStart(2, '0')
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`
+}
+
+const palettes = new Map<string, Record<string, string>>()
+/** The fine colors of a Clawd whose body is `body`: light rim, shaded side, darker band, eyes. */
+function paletteOf(body: string): Record<string, string> {
+  let kept = palettes.get(body)
+  if (!kept) {
+    const n = Number.parseInt(body.slice(1, 7), 16)
+    const isDark = ((n >> 16) & 255) * 0.3 + ((n >> 8) & 255) * 0.59 + (n & 255) * 0.11 < 70
+    kept = { O: body, L: shade(body, 1.25), R: shade(body, 1.35), D: shade(body, 0.8), S: shade(body, 0.86), E: isDark ? '#e9e4da' : '#2b1d18' }
+    palettes.set(body, kept)
+  }
+  return kept
+}
 const CLAWD_COLORS = { O: CLAUDE, L: '#eb9b80', D: '#b05d42', E: '#2b1d18' }
 /** His fine pixels' colors: the body's, a rim of light along the top, a shade down the right. */
 const FINE_COLORS: Record<string, string> = { ...CLAWD_COLORS, R: '#f0a88c', S: '#b8603f' }
@@ -448,20 +502,21 @@ const PINK = '#ff6b9d'
 const SHADES = '#1a1b26'
 
 /** Clawd in `art`, dressed in `look`: a shimmer, the eyes, a hat on his head, a thing in his left hand. */
-export function drawClawd(cv: Canvas, x: number, y: number, art: readonly string[], look: MuseLook | null, t: number): void {
+export function drawClawd(cv: Canvas, x: number, y: number, art: readonly string[], look: MuseLook | null, t: number, body?: string): void {
+  const colors = body ? paletteOf(body) : FINE_COLORS
   if (look?.shiny) {
     // A holographic band sweeping across him.
     art.forEach((line, j) => {
       for (let i = 0; i < line.length; i++) {
-        const color = CLAWD_COLORS[line[i] as keyof typeof CLAWD_COLORS]
+        const color = colors[line[i]!]
         if (color) plot(cv, x + i, y + j, line[i] !== 'E' && mod(i - j - t, 12) < 2 ? '#ffe6d9' : color)
       }
     })
-  } else drawFine(cv, x, y, fineOf(art), FINE_COLORS)
+  } else drawFine(cv, x, y, fineOf(art), colors)
   if (!look) return
   const eye = (dx: number, dy: number, color: string) => plot(cv, x + dx, y + dy, color)
-  const clear = () => EYE_X.forEach(cx => [1, 2].forEach(dy => eye(cx, dy, CLAWD_COLORS.O)))
-  const dark = CLAWD_COLORS.E
+  const clear = () => EYE_X.forEach(cx => [1, 2].forEach(dy => eye(cx, dy, colors.O!)))
+  const dark = colors.E!
   switch (look.eyes) {
     case 'happy':
       clear()

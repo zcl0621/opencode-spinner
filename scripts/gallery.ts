@@ -1,7 +1,8 @@
-// Renders Clawd's workbench vignettes (assets/clawd.svg) and frames of a skit
+// Renders Clawd's workbench vignettes (assets/clawd.svg) and moments of skits
 // in the little theater (assets/theater.svg) with the plugin's own drawing
-// code, in fine pixels: `bun scripts/gallery.ts`. The skit is hand-written to
-// show what the theater can act out; in use, skits come from the model.
+// code, in fine pixels: `bun scripts/gallery.ts`. The skits (samples.ts) are
+// hand-written to show what the theater can act out; in use, they come from
+// the model.
 import { mkdirSync, writeFileSync } from 'node:fs'
 
 import { octantBits, segments, setPixels } from '../src/cells'
@@ -9,6 +10,7 @@ import type { Grid } from '../src/cells'
 import { VIGNETTES, benchScene, vignetteAt } from '../src/clawd'
 import { parseSkits } from '../src/muse'
 import { skitScene } from '../src/stage'
+import { SAMPLE_SKITS } from './samples'
 
 setPixels('fine')
 
@@ -97,42 +99,26 @@ writeFileSync(
 )
 console.log(`assets/clawd.svg: ${names.length} of ${VIGNETTES.length} vignettes`)
 
-// ---- the theater: a hand-written skit, a frame per beat ------------------------
+// ---- the theater: hand-written skits, a few moments of each -------------------
 
-const [skit] = parseSkits(
-  JSON.stringify({
-    skits: [
-      {
-        title: 'Night fishing for bugs',
-        place: { backdrop: 'sea', sky: 'moon', weather: 'stars', colors: { far: '#1f2a44', near: '#3d59a1', ground: '#6b5a48', accent: '#e0af68' } },
-        look: { eyes: 'normal', colors: { A: '#e0af68', B: '#8c6a3f' }, hat: ['..........BBBBBBBB', '........BAAAAAAAAB', '........BAAAAAAAAB', '......BBBBBBBBBBBBBB'], held: [] },
-        props: [
-          { id: 'bucket', x: 0.85, motion: 'still', colors: { G: '#9aa5ce', D: '#565f89', F: '#7aa2f7' }, frames: [['..DDDDDDDDDD..', '.DGGGGGGGGGGD.', '.DGFFFFFFFFGD.', '.DGGGGGGGGGGD.', '..DGGGGGGGGD..', '..DGGGGGGGGD..', '...DGGGGGGD...', '....DDDDDD....']] },
-          { id: 'bug', x: 0.45, motion: 'float', colors: { K: '#9ece6a', E: '#1a1b26', W: '#c0caf5' }, frames: [['.W....W.', '..KKKK..', '.KEKKEK.', 'KKKKKKKK', '.K.KK.K.'], ['W......W', '..KKKK..', '.KEKKEK.', 'KKKKKKKK', 'K..KK..K']] },
-        ],
-        beats: [
-          { do: 'walk', to: 0.25, secs: 2, effect: 'none', say: '' },
-          { do: 'look', prop: 'bug', secs: 2, effect: 'question', say: 'a bug?' },
-          { do: 'carry', prop: 'bug', to: 0.6, secs: 3, effect: 'sparks', say: 'gotcha' },
-          { do: 'throw', prop: 'bug', to: 0.95, secs: 3, effect: 'none', say: '' },
-          { do: 'cheer', secs: 2, effect: 'confetti', say: 'fixed!' },
-          { do: 'sleep', secs: 2, effect: 'none', say: '' },
-        ],
-      },
-    ],
-  }),
-  'think',
-)
-if (!skit) throw new Error('the sample skit no longer parses')
-const SW = 64
-const moments: [string, number][] = [['walk in', 8], ['look', 32], ['carry', 60], ['throw', 84], ['cheer', 105], ['sleep', 125]]
+const skits = parseSkits(JSON.stringify(SAMPLE_SKITS), 'think')
+if (skits.length !== SAMPLE_SKITS.skits.length) throw new Error('a sample skit no longer parses')
+const SW = 80
+const moments: [string, number, number][] = [
+  ['a band: strum, drum, keys', 0, 12],
+  ['the bow', 0, 95],
+  ['ride: the road rolls by', 1, 20],
+  ['eat, then a hug', 1, 75],
+  ['punch: the other reels', 2, 45],
+  ['chase', 2, 100],
+]
 const sout: string[] = []
 let sy = 1
-moments.forEach(([name, t], i) => {
+moments.forEach(([name, k, t], i) => {
   const col = i % 2
   const top = 1 + Math.floor(i / 2) * 8
   sout.push(`<text x="${(1 + col * (SW + 3)) * CW}" y="${top * CH + CH - 4}" fill="#7aa2f7" font-weight="bold">${esc(name)}</text>`)
-  gridRuns(skitScene(skit, t, SW, 3)).forEach((r, k) => row(sout, r, 1 + col * (SW + 3), top + 1 + k))
+  gridRuns(skitScene(skits[k]!, t, SW, 3)).forEach((r, k) => row(sout, r, 1 + col * (SW + 3), top + 1 + k))
   sy = Math.max(sy, top + 8)
 })
 const swidth = (SW * 2 + 5) * CW
@@ -146,4 +132,4 @@ writeFileSync(
     '</svg>',
   ].join('\n'),
 )
-console.log(`assets/theater.svg: ${moments.length} moments of "${skit.title}"`)
+console.log(`assets/theater.svg: ${moments.length} moments of ${skits.length} skits`)

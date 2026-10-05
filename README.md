@@ -1,6 +1,6 @@
 # opencode-spinner
 
-A little pixel theater that plays above the prompt while opencode 2.0 works. Its star is Clawd, Claude's mascot. A model writes short skits for him about what the agent is doing (thinking, searching, editing, running a shell command, sending out subagents), each with its own place, props, costume, gags and lines, and the plugin acts them out. Between skits, and before any are written, he works at his bench. A Clawd pet stands beside the show, changing pose and speaking up as the agent works. When a turn ends, a burst of confetti shows how long it took.
+A little pixel theater that plays above the prompt while opencode 2.0 works. Its stars are Clawd, Claude's mascot, and up to two more Clawds in other colors. A model writes short skits about what the agent is doing (thinking, searching, editing, running a shell command, sending out subagents), each with its own place, cast, props, gags and lines: a band on stage, a road trip, a kung fu fight. The plugin acts them out. Between skits, and before any are written, he works at his bench. A Clawd pet stands beside the show, changing pose and speaking up as the agent works. When a turn ends, a burst of confetti shows how long it took.
 
 The random seed that steers the model comes from whatever your Mac is playing, or from crypto when nothing is.
 
@@ -21,14 +21,27 @@ The show is six rows tall. What plays depends on what the agent is doing, and th
 A skit is a script the model writes and the plugin acts out. It has:
 
 - a title, shown as it starts
-- a place: a far backdrop (a city, hills, mountains, a forest, the sea, a desert, space, snow or a room), a moon, sun or planet, and weather (stars, rain, snow, leaves, fireflies, bubbles, sakura), in the model's colors
-- a look for Clawd, the way his stickers dress him: eyes (happy, closed, dizzy, hearts, shades, stars), a hat and something in his hand, drawn by the model, and now and then a holographic shimmer
-- up to four props the model draws, which move on their own (bob, float, fall, spin, blink, shake, orbit, grow)
-- two to eight beats: Clawd walks somewhere, carries a prop over his head, pushes it, throws it in an arc, jumps, waves, cheers, dances, sits, sleeps or looks at something, while an effect goes off (sparks, hearts, music notes, zzz, steam, confetti, stars, bubbles, lightning, smoke, rain, `?`, `!`) and he says a line in your language
+- a cast of one to three Clawds, each with a name, a body color and a look: eyes (happy, closed, dizzy, hearts, shades, stars), a hat and something in hand, drawn by the model the way Clawd's stickers dress him, and now and then a holographic shimmer
+- a place: a far backdrop (a city, hills, mountains, a forest, the sea, a desert, space, snow, a room, a concert stage with sweeping spotlights, a road with lamp posts going by, a beach, a library, a castle, a cave, the sea floor, a kitchen, a stadium full of fans, a haunted yard, a jungle or a classroom), something in the sky (a moon, a sun, a planet, clouds, a rainbow, a UFO) and weather (stars, rain, snow, leaves, fireflies, bubbles, sakura, confetti, fog, embers), in the model's colors
+- up to four props the model draws: instruments, vehicles, food, tools, animals, anything. They move on their own (bob, float, fall, spin, blink, shake, orbit, grow, dance, hop, pace, sway, flap) and can keep an effect going, like notes over a jukebox or smoke over a pot
+- two to ten beats. In each beat every Clawd can do something at the same time, and the ones without anything to do turn to watch
 
-A skit runs 6 to 30 seconds. Here is one, hand-written to show what the theater can do (real ones come from the model):
+What a Clawd can do:
 
-![A skit in the theater: walking in, looking, carrying, throwing, cheering, sleeping](assets/theater.svg)
+- move: walk, run, jump, fly, swim, ride a prop (a car, a boat, a broom; the world rolls by)
+- strike a pose: wave, cheer, dance, bow, spin, sit, sleep, shiver, fall over, think, look at something, hide behind a prop
+- use his hands: work, dig, paint, read, eat (the food gets smaller), hold something up, cast a spell
+- play music: strum a guitar, drum, blow a horn, play keys, each with its own arm movements
+- handle props: carry one overhead, throw it in an arc, push it along, kick it away
+- deal with another Clawd: high-five, hug, chase (the other runs off), follow, punch or kick (the other reels, dizzy), throw him something (he catches it), cast a spell on him (stars in his eyes)
+
+Each beat can set off an effect (sparks, hearts, music notes, zzz, steam, confetti, stars, bubbles, lightning, smoke, rain, `?`, `!`, an impact, dust, a thought bubble, tears, fire, wind), and any Clawd can say a line in your language. Many actions bring their own effect when the script names none: notes for music, dust for running, an impact for a punch.
+
+The prompt asks for two very different skits at a time and, through the seed, names a kind of scene to stage one of them like, from films, novels and shows: a rock concert, a road trip, a heist, a kung fu duel, a cooking show, a haunted house, a western showdown, a rom-com meet-cute, and so on.
+
+A skit runs 8 to 36 seconds. These three are hand-written to show what the theater can do (real ones come from the model): a band, a road trip, a kung fu fight.
+
+![Moments of three skits: a three-Clawd band, a road trip, a kung fu fight](assets/theater.svg)
 
 ### The bench
 
@@ -48,7 +61,7 @@ printf '\U0001CD00\U0001CD01\U0001CD0B\U0001CD5F\U0001CDE5\n'
 
 ## Content written by a model
 
-This is on by default. The plugin still draws every frame itself. The model only writes skits as JSON, and the plugin checks them strictly before use: lengths, the lists of actions and effects, colors and pixel art are all bounded, and props copied from the format example are dropped. The prompt asks for two very different skits each time, with a seed and two theme words to push it somewhere new.
+This is on by default. The plugin still draws every frame itself. The model only writes skits as JSON, and the plugin checks them strictly before use: lengths, the cast, the lists of actions and effects, colors and pixel art are all bounded; an act missing the prop or partner it needs becomes a plain one (a `ride` without a vehicle is a walk), and props copied from the format example are dropped. Skits kept from earlier versions still play.
 
 ### When it asks
 

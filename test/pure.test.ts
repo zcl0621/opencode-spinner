@@ -1,14 +1,16 @@
 // The pure parts: the show (the bench and the skits), the pixels, the finale,
 // the pet's frames, the sound seed, the muse, the labels and `/spinner`'s arguments.
+import { readFileSync } from 'node:fs'
 import { expect, test } from 'bun:test'
 
 import { AUDIO_BANDS, SoundSeed, lineSplitter, parseTapLine, seedFrom } from '../src/audio'
 import { canvas, cells, dot, octantBits, plot } from '../src/cells'
 import { VIGNETTES, benchScene, poolOf, toolKind, vignetteAt } from '../src/clawd'
-import { HAT_W, MUSE_LOW, PROP_H, PROP_W, jsonOf, kindOf, lightestVariant, museNeed, parseModel, parseSkits, seedLine, skitPrompt } from '../src/muse'
+import { ACTIONS, BACKDROPS, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, museNeed, parseModel, parseSkits, seedLine, skitPrompt } from '../src/muse'
 import type { Muse, MuseSkit } from '../src/muse'
 import { SHOW_ROWS, nextStage, showScene, stretchAt } from '../src/show'
-import { skitLength, skitScene } from '../src/stage'
+import { castAt, skitLength, skitScene } from '../src/stage'
+import { SAMPLE_SKITS } from '../scripts/samples'
 import { parseCommand } from '../src/command'
 import { pixelModeOf, readConfig } from '../src/config'
 import { parseLanguage, resolveLanguage } from '../src/lang'
@@ -337,9 +339,12 @@ test('muse: model ids, prompts, and replies read strictly', () => {
   expect(skit!.kind).toBe('think')
   expect(skit!.title).toBe('Night fishing for bugs')
   expect(skit!.place!.backdrop).toBe('sea')
-  expect(skit!.look!.hat.length).toBe(3)
+  // The shape before casts: Clawd alone, in the skit's look, one act a beat.
+  expect(skit!.cast).toHaveLength(1)
+  expect(skit!.cast[0]!.name).toBe('Clawd')
+  expect(skit!.cast[0]!.look!.hat.length).toBe(3)
   expect(skit!.props.map(p => p.id)).toEqual(['bucket', 'bug'])
-  expect(skit!.beats.map(b => b.do)).toEqual(['walk', 'look', 'carry', 'throw', 'push', 'cheer', 'sleep'])
+  expect(skit!.beats.map(b => b.acts.map(a => a.do).join())).toEqual(['walk', 'look', 'carry', 'throw', 'push', 'cheer', 'sleep'])
   expect(skitLength(skit!)).toBe(170)
 
   // Strict on content, lenient on form.
@@ -356,7 +361,7 @@ test('muse: model ids, prompts, and replies read strictly', () => {
       ],
       beats: [
         { do: 'carry', prop: 'ghost', secs: 99, effect: 'nuke', say: '<a line>' },
-        { do: 'fly', secs: 2 },
+        { do: 'teleport', secs: 2 },
         { do: 'throw', secs: 2, say: 'hi\nthere' },
         { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 },
       ],
@@ -368,21 +373,21 @@ test('muse: model ids, prompts, and replies read strictly', () => {
   const o = odd[0]!
   expect(o.title.length).toBeLessThanOrEqual(24)
   expect(o.place).toEqual({ backdrop: 'none', sky: 'none', weather: 'clear', colors: { far: '#112233', near: '#445566', ground: '#778899', accent: '#abcdef' } })
-  expect(o.look).toBeNull()
+  expect(o.cast[0]!.look).toBeNull()
   expect(o.props.map(p => p.id)).toEqual(['x', 'big'])
-  expect(o.props[0]).toEqual({ id: 'x', frames: [['AAA', '.B.']], colors: { A: '#ff0000', B: '#00ff00' }, x: 1, motion: 'still' })
+  expect(o.props[0]).toEqual({ id: 'x', frames: [['AAA', '.B.']], colors: { A: '#ff0000', B: '#00ff00' }, x: 1, motion: 'still', effect: 'none' })
   expect(o.props[1]!.frames[0]!.length).toBe(PROP_H)
   expect(o.props[1]!.frames[0]![0]!.length).toBe(PROP_W)
-  expect(o.beats.map(b => b.do)).toEqual(['walk', 'stand', 'wave', 'wave', 'wave'])
-  expect(o.beats[0]).toEqual({ do: 'walk', to: null, prop: null, effect: 'none', say: '', secs: 6 })
-  expect(o.beats[1]!.say).toBe('hi there')
-  expect(o.beats.reduce((n, b) => n + b.secs, 0)).toBeLessThanOrEqual(30)
+  expect(o.beats.map(b => b.acts[0]!.do)).toEqual(['walk', 'stand', 'wave', 'wave', 'wave', 'wave'])
+  expect(o.beats[0]).toEqual({ secs: 6, acts: [{ who: 0, do: 'walk', to: null, prop: null, with: null, effect: 'none', say: '' }] })
+  expect(o.beats[1]!.acts[0]!.say).toBe('hi there')
+  expect(o.beats.reduce((n, b) => n + b.secs, 0)).toBeLessThanOrEqual(36)
   expect(HAT_W).toBe(28)
 })
 
 test('the theater: every skit frame fills the width and rows, and it acts the beats out', () => {
   const skit = SKITS()[0]!
-  const bare: MuseSkit = { ...skit, place: null, look: null }
+  const bare: MuseSkit = { ...skit, place: null, cast: [{ ...skit.cast[0]!, look: null }] }
   const texts: string[] = []
   for (const s of [skit, bare]) {
     for (const w of [16, 40, 81, 160]) {
@@ -398,6 +403,63 @@ test('the theater: every skit frame fills the width and rows, and it acts the be
   for (const said of ['Night fishing', 'a bug?', 'gotcha', 'fixed!', '?', 'z']) expect(all).toContain(said)
 })
 
+test('the theater: casts of Clawds act together, every action, place and effect, at any width', () => {
+  const samples = parseSkits(JSON.stringify(SAMPLE_SKITS), 'think')
+  expect(samples.map(k => k.cast.length)).toEqual([3, 2, 2])
+  const band = samples[0]!
+  expect(band.beats[0]!.acts.map(a => [a.who, a.do, a.prop])).toEqual([[0, 'strum', 'guitar'], [1, 'drum', 'drums'], [2, 'keys', 'keys']])
+  const kungfu = samples[2]!
+  expect(kungfu.beats[1]!.acts[0]).toMatchObject({ who: 0, do: 'punch', with: 1 })
+
+  // Partners react: the one punched reels away, dizzy; the one chased runs off.
+  const lintAt = (t: number) => castAt(kungfu, t, 100)[1]!
+  const before = lintAt(20)
+  const punched = lintAt(48)
+  expect(punched.eyes).toBe('dizzy')
+  expect(punched.x).not.toBe(before.x)
+  const chased = [lintAt(81), lintAt(105)]
+  expect(chased[1]!.x).not.toBe(chased[0]!.x)
+  // In the band, each plays his own instrument at once.
+  const playing = castAt(band, 15, 100)
+  expect(new Set(playing.map(a => `${a.left}${a.right}`)).size).toBeGreaterThan(1)
+
+  // Every action, with and without its prop and partner, every place, sky, weather and prop motion: full width, every frame.
+  const art = ['..AAAA..', '.ABBBBA.', 'AAAAAAAA', '.A....A.']
+  for (const [k, action] of ACTIONS.entries()) {
+    const skit = parseSkits(JSON.stringify({ skits: [{
+      title: action,
+      place: { backdrop: BACKDROPS[k % BACKDROPS.length], sky: SKIES[k % SKIES.length], weather: WEATHERS[k % WEATHERS.length], colors: { far: '#223344', near: '#556677', ground: '#443322', accent: '#ffcc00' } },
+      cast: [{ name: 'A', color: '#d77757' }, { name: 'B', color: '#7aa2f7' }, { name: 'C', color: '#000000' }],
+      props: [{ id: 'p', x: 0.6, motion: MOTIONS[k % MOTIONS.length], effect: EFFECTS[k % EFFECTS.length], colors: { A: '#ffffff', B: '#ff0000' }, frames: [art] }],
+      beats: [
+        { secs: 3, acts: [{ who: 'A', do: action, prop: 'p', with: 'B', effect: EFFECTS[(k + 3) % EFFECTS.length], say: 'hi' }, { who: 'C', do: action, to: 0.9 }] },
+        { secs: 2, acts: [{ who: 'B', do: action, with: 'A', say: 'yo' }, { who: 'A', do: 'look', with: 'B', say: 'ok' }] },
+      ],
+    }] }), 'think')[0]!
+    expect(skit.beats[0]!.acts[0]!.do).toBe(action)
+    for (const w of [16, 45, 97]) {
+      for (let t = 0; t < skitLength(skit) + 5; t += 2) {
+        const g = skitScene(skit, t, w, k)
+        expect(g).toHaveLength(SHOW_ROWS)
+        for (const row of g) expect(widthOf(row)).toBe(w)
+      }
+    }
+  }
+})
+
+test('muse: broken JSON from a small model is mended: mixed-up brackets, an unclosed list, two cast members run together', () => {
+  // A real reply from opencode/nemotron-3.5-lightning-free to skitPrompt, as it came: JSON.parse fails on it.
+  const reply = readFileSync(new URL('./fixtures/nemotron-skits.txt', import.meta.url), 'utf8')
+  expect(() => JSON.parse(reply)).toThrow()
+  const skits = parseSkits(reply, 'shell')
+  expect(skits.map(k => k.title)).toEqual(['魔术秀', '激情追逐'])
+  expect(skits[0]!.cast.map(c => c.name)).toEqual(['Clawd', '蓝子'])
+  expect(skits[0]!.beats[1]!.acts.map(a => [a.who, a.do, a.with])).toEqual([[0, 'highfive', 1], [1, 'dance', null]])
+  expect(skits[1]!.beats.length).toBe(3)
+  // Still strict: mending never invents content.
+  expect(parseSkits('{"skits": [{"title": "x", "beats": [{"do": "wave"}]}', 'think')).toEqual([])
+})
+
 test('muse: copies of the format example are dropped; the seed decides when to ask', () => {
   const lamp = [['...CCCC...', '..CCCCCC..', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...'], ['....CC....', '...CCCC...', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...']]
   // The example's lamp, as sent and as a model once sent it back with a few pixels changed: dropped, and the beats that used it.
@@ -406,7 +468,7 @@ test('muse: copies of the format example are dropped; the seed decides when to a
     const copy = JSON.stringify({ skits: [{ title: 'Copied', props: [{ id: 'lamp', colors: { B: '#7aa2f7', C: '#ffd166' }, frames }], beats: [{ do: 'carry', prop: 'lamp' }, { do: 'wave' }] }] })
     const [skit] = parseSkits(copy, 'think')
     expect(skit!.props).toEqual([])
-    expect(skit!.beats.map(b => [b.do, b.prop])).toEqual([['walk', null], ['wave', null]])
+    expect(skit!.beats.map(b => [b.acts[0]!.do, b.acts[0]!.prop])).toEqual([['walk', null], ['wave', null]])
   }
 
   const empty: Muse = { skits: [] }

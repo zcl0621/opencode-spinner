@@ -8,7 +8,7 @@ import { createStore, produce } from 'solid-js/store'
 import { SoundSeed, seedFrom } from './audio'
 import type { Config } from './config'
 import { lang, m } from './i18n'
-import { kindOf, lightestVariant, museNeed, parseModel, parseSkits, skitPrompt } from './muse'
+import { kindOf, lightestVariant, museNeed, parseModel, parseSkits, skitPrompt, upgradeSkit } from './muse'
 import type { Muse, MuseSkit } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
 import type { News } from './pet'
@@ -289,7 +289,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   // ---- the muse ----------------------------------------------------------
 
   /** The skits kept (a store from before skits has none). */
-  const museOf = (): Muse => ({ skits: muse.skits ?? [] })
+  const museOf = (): Muse => ({ skits: (muse.skits ?? []).map(upgradeSkit) })
 
   const withTimeout = <T,>(p: Promise<T>, ms: number) =>
     Promise.race([p, new Promise<never>((_, reject) => later(ms, () => reject(new Error(`no reply in ${ms / 1000}s`))))])

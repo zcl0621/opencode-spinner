@@ -116,7 +116,9 @@ function outfitOf(look: MuseLook, key: string): Outfit | null {
 
 /** The outfit for a turn's seed: a built-in one, or about half the time one from the skits' looks. */
 export function outfitFor(seed: number, muse?: Muse): Outfit {
-  const looks = (muse?.skits ?? []).flatMap((s, i) => (s.look ? [outfitOf(s.look, `muse:${i}:${s.title}`)] : [])).filter((o): o is Outfit => o !== null)
+  const looks = (muse?.skits ?? [])
+    .flatMap((s, i) => (s.cast ?? []).flatMap((c, j) => (c.look ? [outfitOf(c.look, `muse:${i}:${j}:${s.title}`)] : [])))
+    .filter((o): o is Outfit => o !== null)
   const salt = seed % 9973
   if (looks.length > 0 && noise(salt + 0.3) < 0.5) return looks[Math.floor(noise(salt * 7 + 0.1) * looks.length)]!
   return OUTFITS[Math.floor(noise(salt * 3 + 0.7) * OUTFITS.length)]!
