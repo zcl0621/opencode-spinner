@@ -16,6 +16,8 @@ import { pixelModeOf, readConfig } from '../src/config'
 import { parseLanguage, resolveLanguage } from '../src/lang'
 import { busyLabel, formatDuration, levelOf, newsOf, toolLabel } from '../src/pet'
 import { CLAWD_PET, OUTFITS, PET_ROWS, PET_W, dockPetOf, outfitFor, petFrame } from '../src/pets'
+import { FINALE_TICKS, FINALE_VARIANTS, finale, finaleIdFor } from '../src/finale'
+import type { FinaleKind } from '../src/finale'
 import { THEME, finaleScene, segments, textWidth } from '../src/themes'
 import type { Act } from '../src/themes'
 
@@ -481,4 +483,21 @@ test('muse: copies of the format example are dropped; the seed decides when to a
   for (let seed = 0; seed < 100 * 256; seed += 256) if (museNeed(full, 'edit', seed)) asks++
   expect(asks).toBeGreaterThan(20)
   expect(asks).toBeLessThan(50)
+})
+
+test('finale: every variant fills the width on six rows, and ids pick different variants', () => {
+  for (const kind of Object.keys(FINALE_VARIANTS) as FinaleKind[]) {
+    const count = FINALE_VARIANTS[kind]
+    const seen = new Set<string>()
+    for (let n = 0; n < count; n++) {
+      const id = finaleIdFor(kind, n)
+      for (const w of [12, 40, 90]) for (let t = 0; t < FINALE_TICKS; t++) {
+        const grid = finale(kind, 'Done · 7s', t, w, id)
+        expect(grid.length).toBe(6)
+        for (const row of grid) expect(widthOf(row)).toBe(w)
+      }
+      seen.add(JSON.stringify(finale(kind, 'Done', 10, 60, id)))
+    }
+    expect(seen.size).toBe(count)
+  }
 })

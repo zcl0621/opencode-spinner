@@ -1,5 +1,5 @@
-// Renders Clawd's workbench vignettes (assets/clawd.svg) and moments of skits
-// in the little theater (assets/theater.svg) with the plugin's own drawing
+// Renders Clawd's workbench vignettes (assets/clawd.svg), moments of skits in
+// the little theater (assets/theater.svg) and every finale (assets/finale.svg) with the plugin's own drawing
 // code, in fine pixels: `bun scripts/gallery.ts`. The skits (samples.ts) are
 // hand-written to show what the theater can act out; in use, they come from
 // the model.
@@ -9,6 +9,8 @@ import { octantBits, segments, setPixels } from '../src/cells'
 import type { Grid } from '../src/cells'
 import { VIGNETTES, benchScene, vignetteAt } from '../src/clawd'
 import { parseSkits } from '../src/muse'
+import { FINALE_VARIANTS, finale, finaleIdFor } from '../src/finale'
+import type { FinaleKind } from '../src/finale'
 import { skitScene } from '../src/stage'
 import { SAMPLE_SKITS } from './samples'
 
@@ -133,3 +135,39 @@ writeFileSync(
   ].join('\n'),
 )
 console.log(`assets/theater.svg: ${moments.length} moments of ${skits.length} skits`)
+
+// ---- finales: every variant, a moment in --------------------------------------
+
+const FW = 60
+const fout: string[] = []
+let fy = 1
+const shots: [string, FinaleKind, number, number][] = []
+const NAMES: Record<FinaleKind, string[]> = {
+  answer: ['fireworks', 'confetti cannon', 'curtain call', 'trophy', 'disco', 'rainbow dash', 'high-five', 'level up'],
+  aborted: ['rain cloud', 'shrug', 'walk off'],
+  error: ['glitch', 'explosion', 'short circuit'],
+}
+const AT: Record<FinaleKind, number[]> = { answer: [14, 16, 20, 16, 12, 18, 15, 10], aborted: [12, 4, 20], error: [7, 13, 8] }
+for (const kind of ['answer', 'aborted', 'error'] as const) {
+  for (let n = 0; n < FINALE_VARIANTS[kind]; n++) shots.push([NAMES[kind][n]!, kind, n, AT[kind][n]!])
+}
+shots.forEach(([name, kind, n, t], i) => {
+  const col = i % 2
+  const top = 1 + Math.floor(i / 2) * 8
+  fout.push(`<text x="${(1 + col * (FW + 3)) * CW}" y="${top * CH + CH - 4}" fill="#7aa2f7" font-weight="bold">${esc(`${kind}: ${name}`)}</text>`)
+  const label = kind === 'answer' ? '✻ Done · 12s' : kind === 'aborted' ? 'Interrupted' : 'Error'
+  gridRuns(finale(kind, label, t, FW, finaleIdFor(kind, n))).forEach((r, k) => row(fout, r, 1 + col * (FW + 3), top + 1 + k))
+  fy = Math.max(fy, top + 8)
+})
+const fwidth = (FW * 2 + 5) * CW
+const fheight = fy * CH
+writeFileSync(
+  new URL('../assets/finale.svg', import.meta.url),
+  [
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${fwidth}" height="${fheight}" viewBox="0 0 ${fwidth} ${fheight}" font-family="Menlo, Monaco, 'DejaVu Sans Mono', monospace" font-size="13">`,
+    `<rect width="100%" height="100%" fill="${BG}" rx="8"/>`,
+    ...fout,
+    '</svg>',
+  ].join('\n'),
+)
+console.log(`assets/finale.svg: ${shots.length} finales`)

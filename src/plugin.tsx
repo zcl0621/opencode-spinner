@@ -121,7 +121,7 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
       stage = undefined
     }
     const tick = t() - base
-    if (sc.finale) return finaleScene(sc.finale.kind, sc.finale.label, tick, w)
+    if (sc.finale) return finaleScene(sc.finale.kind, sc.finale.label, tick, w, sc.finale.id)
     const tool = s.toolOf(sid()) || undefined
     stage = nextStage(stage, kindOf(sc.act, tool), tick, s.muse())
     return THEME.scene(tick, w, sc.act, tool, s.muse(), s.run(sid()).seed, stage)

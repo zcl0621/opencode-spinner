@@ -1,6 +1,6 @@
 # opencode-spinner
 
-A little pixel theater that plays above the prompt while opencode 2.0 works. Its stars are Clawd, Claude's mascot, and up to two more Clawds in other colors. A model writes short skits about what the agent is doing (thinking, searching, editing, running a shell command, sending out subagents), each with its own place, cast, props, gags and lines: a band on stage, a road trip, a kung fu fight. The plugin acts them out. Between skits, and before any are written, he works at his bench. A Clawd pet stands beside the show, changing pose and speaking up as the agent works. When a turn ends, a burst of confetti shows how long it took.
+A little pixel theater that plays above the prompt while opencode 2.0 works. Its stars are Clawd, Claude's mascot, and up to two more Clawds in other colors. A model writes short skits about what the agent is doing (thinking, searching, editing, running a shell command, sending out subagents), each with its own place, cast, props, gags and lines: a band on stage, a road trip, a kung fu fight. The plugin acts them out. Between skits, and before any are written, he works at his bench. A Clawd pet stands beside the show, changing pose and speaking up as the agent works. When a turn ends, a short pixel finale shows how long it took, a different one each time.
 
 The random seed that steers the model comes from whatever your Mac is playing, or from crypto when nothing is.
 
@@ -103,7 +103,11 @@ Each turn it puts on a new outfit, picked by the turn's seed: a party hat, a cro
 
 With the pet turned off (`companion: false`), Clawd stands in front of opencode's own progress bar instead (`▐▛█▜▌▭▭ ⬝⬝⬝■■ esc interrupt`).
 
-A finished turn gets confetti and the time taken (`▐▛█▜▌ ✻  Done · 12s`), an interrupted one a sad face, an error a glitchy flicker. Under 60 columns or 20 rows the show steps aside and the pet shrinks to one line. The pet is four rows tall: the top one holds its hat. The **Spinner** label in the prompt footer turns all animations off and on.
+A finished turn gets one of eight four-second finales next to the time taken (`✻ Done · 12s`): fireworks, a confetti cannon, a curtain call with the whole cast, a trophy, a disco ball, a rainbow dash, a high five, a level-up glow. An interrupted turn gets a rain cloud, a shrug or a walk-off; an error a glitch, an explosion or a short circuit. Which one plays follows the turn, so two turns in a row rarely match.
+
+![All fourteen finales](assets/finale.svg)
+
+ Under 60 columns or 20 rows the show steps aside and the pet shrinks to one line. The pet is four rows tall: the top one holds its hat. The **Spinner** label in the prompt footer turns all animations off and on.
 
 ## Install
 
@@ -163,7 +167,7 @@ With `language` set to `auto`, the plugin follows the system locale (`LC_ALL`, `
 bun install
 bun run typecheck
 bun run test            # = bun test --conditions browser
-bun scripts/gallery.ts  # regenerates assets/clawd.svg and assets/theater.svg
+bun scripts/gallery.ts  # regenerates assets/clawd.svg, assets/theater.svg and assets/finale.svg
 ```
 
 - `src/plugin.tsx` is the entry point. It claims UI slots (`session.composer.top` for the show and the pet, `prompt.footer.status` for Clawd on the progress line, `prompt.footer` for the toggle) and registers `/spinner`.
@@ -171,7 +175,7 @@ bun scripts/gallery.ts  # regenerates assets/clawd.svg and assets/theater.svg
 - `src/show.ts` latches what the agent is doing and cuts the turn into skits and bench visits. `src/stage.ts` is the theater that acts skits out, `src/place.ts` draws their places, and `src/clawd.ts` draws Clawd, the workbench and its 20 vignettes.
 - `src/muse.ts` holds the skit format, the prompt, the strict reading of replies, and the decision whether to ask.
 - `src/audio.ts`, `src/audio-tap.swift` and `src/tap.ts` are the sound seed, the system-audio helper, and the code that builds and runs it.
-- `src/themes.ts`, `src/scenes.ts`, `src/pets.ts` and `src/cells.ts` hold the finale, the shared layers, the pet, and the pixel canvas (octants or half blocks). `src/grid.tsx` draws a grid as OpenTUI text.
+- `src/finale.ts` draws the finales. `src/themes.ts`, `src/scenes.ts`, `src/pets.ts` and `src/cells.ts` hold the theme, the shared layers, the pet, and the pixel canvas (octants or half blocks). `src/grid.tsx` draws a grid as OpenTUI text.
 - `src/i18n.ts` and `src/lang.ts` hold the messages in each language.
 
 Any file that imports `solid-js` must be a `.tsx` file. opencode only redirects modules for `.tsx` files; a `.ts` file gets a second copy of Solid, and the UI stops updating.

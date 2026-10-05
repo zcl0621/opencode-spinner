@@ -9,6 +9,7 @@ import { readConfig } from '../src/config'
 import { setLang } from '../src/i18n'
 import { createSpinner } from '../src/spinner'
 import type { Spinner } from '../src/spinner'
+import { FINALE_MS } from '../src/themes'
 
 setLang('en')
 
@@ -224,7 +225,7 @@ test('timers: the finale clears after FINALE_MS, the pet dozes off after five qu
     emit('session.execution.started', { sessionID: S })
     emit('session.execution.succeeded', { sessionID: S })
     expect(spinner.run(S).finale).not.toBe(null)
-    jest.advanceTimersByTime(3001)
+    jest.advanceTimersByTime(FINALE_MS + 1)
     expect(spinner.run(S).finale).toBe(null)
     expect(spinner.stateOf(S)).toBe('ready')
     jest.advanceTimersByTime(5 * 60_000)

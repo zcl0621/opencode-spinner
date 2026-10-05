@@ -24,5 +24,5 @@ A TUI plugin for opencode 2.x. It draws Clawd's pixel show above the prompt (a d
   bun run test   # bun test --conditions browser (Solid's reactive build)
   ```
 
-- To try changes live, symlink the repo into a test project's `.opencode/plugins/` and run opencode there; plugins hot-reload on save. `bun scripts/gallery.ts` regenerates `assets/clawd.svg` and `assets/theater.svg` (the hand-written skits in `scripts/samples.ts`, which the tests also play, in fine pixels).
+- To try changes live, symlink the repo into a test project's `.opencode/plugins/` and run opencode there; plugins hot-reload on save. `bun scripts/gallery.ts` regenerates `assets/clawd.svg`, `assets/finale.svg` (every finale variant in `src/finale.ts`) and `assets/theater.svg` (the hand-written skits in `scripts/samples.ts`, which the tests also play, in fine pixels).
 - Kept skits outlive code changes: when the skit format changes, read old ones through `upgradeSkit` (muse.ts) rather than dropping them.
