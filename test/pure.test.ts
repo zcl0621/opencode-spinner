@@ -598,6 +598,12 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   expect(prompt).toContain('Anyone the story names')
   expect(prompt).toContain('a regular may sit the episode out')
   expect(prompt).toContain('Keep one thread running across episodes')
+  // Someone the summaries keep naming but who never had a part is asked for by name.
+  const rival = (ep: number, summary: string): MuseSkit => ({ ...kept[0]!, episode: ep, summary })
+  const named = storyOf({ skits: [rival(9, 'Then Rex steals the ladle while Clawd naps.'), rival(8, 'Rex folds the recipe; Meanwhile BLOOP cooks.'), rival(7, 'The Kraken eats soup.')] })
+  expect(named.offstage).toEqual(['Rex'])
+  expect(skitPrompt('edit', undefined, 'en', 7, named)).toContain('Rex keeps coming up in the story but never appeared')
+  expect(story.offstage).toEqual([])
 
   // A new episode is due when none was made lately: then every chance asks, whatever the seed.
   const t0 = 4_000_000_000_000

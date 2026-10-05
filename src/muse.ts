@@ -321,13 +321,38 @@ const EXAMPLE = {
 }
 
 /** The series so far, for the prompt: the last episodes, oldest first, its regular cast, and the session's news. */
-export type Story = { previously: { episode: number; title: string; summary: string }[]; cast: SkitActor[]; news: string[] }
+export type Story = {
+  previously: { episode: number; title: string; summary: string }[]
+  cast: SkitActor[]
+  news: string[]
+  /** Names the recalled summaries keep bringing up who were never in the cast. */
+  offstage: string[]
+}
+
+/** Capitalized words that are not names. */
+const NOT_NAMES = new Set(['The', 'A', 'An', 'And', 'But', 'Then', 'When', 'While', 'After', 'Before', 'Meanwhile', 'Now', 'Later', 'Finally', 'At', 'In', 'On', 'With', 'As', 'It', 'They', 'He', 'She', 'Everyone', 'CI', 'PR', 'API', 'JSON', 'Episode'])
+
+/** Names in two or more summaries (words with a capital, not at the start of a sentence word list above) that no cast member has. */
+function offstageOf(summaries: readonly string[], cast: readonly SkitActor[]): string[] {
+  const known = new Set(cast.flatMap(a => [a.name.toLowerCase(), ...a.name.split(/\s+/).map(w => w.toLowerCase())]))
+  const seen = new Map<string, number>()
+  for (const summary of summaries) {
+    for (const word of new Set(summary.match(/\b[A-Z][a-z]{2,}\b/g) ?? [])) {
+      if (NOT_NAMES.has(word) || known.has(word.toLowerCase())) continue
+      seen.set(word, (seen.get(word) ?? 0) + 1)
+    }
+  }
+  return [...seen].filter(([, n]) => n >= 2).map(([w]) => w).slice(0, 2)
+}
 
 /** The story so far from the kept skits (newest first) and what happened in the session lately. */
 export function storyOf(muse: Muse, news: readonly string[] = []): Story {
   const episodes = muse.skits.filter(s => s.episode !== undefined && s.summary)
   const previously = episodes.slice(0, RECALL).reverse().map(s => ({ episode: s.episode!, title: s.title, summary: s.summary! }))
-  return { previously, cast: episodes[0]?.cast ?? [], news: [...news] }
+  const cast = episodes[0]?.cast ?? []
+  // Everyone who has been on stage in the recalled episodes counts as known.
+  const everyone = episodes.slice(0, RECALL).flatMap(s => s.cast)
+  return { previously, cast, news: [...news], offstage: offstageOf(previously.map(p => p.summary), everyone) }
 }
 
 /** What the next episode is numbered: one past the newest kept. */
@@ -359,6 +384,7 @@ function storyLines(story: Story | undefined): string[] {
         `Anyone the story names (a rival, a guest, someone from the summaries) is on stage as a cast member, not only talked about; with at most ${MAX_CAST} on stage, a regular may sit the episode out to make room. The second skit stands on its own.`,
     )
   } else out.push('The first skit is episode 1 of a new series: introduce its regular cast, with names worth coming back to, and start a thread (a rival, a mystery, a quest) that later episodes can build on. The second skit stands on its own.')
+  if (story && story.offstage.length > 0) out.push(`${story.offstage.join(' and ')} keep${story.offstage.length === 1 ? 's' : ''} coming up in the story but never appeared: bring ${story.offstage.length === 1 ? 'them' : 'both'} on stage in the first skit as cast members.`)
   if (story && story.news.length > 0) out.push(`Lately in the coding session: ${story.news.join('; ')}. Work that into the first skit: its trouble, its twist or its ending.`)
   return out
 }
