@@ -6,7 +6,7 @@ import { expect, test } from 'bun:test'
 import { AUDIO_BANDS, SoundSeed, lineSplitter, parseTapLine, seedFrom } from '../src/audio'
 import { canvas, cells, dot, octantBits, plot } from '../src/cells'
 import { VIGNETTES, benchScene, poolOf, toolKind, vignetteAt } from '../src/clawd'
-import { ACTIONS, BACKDROPS, CAPTION_W, EPISODE_EVERY_MS, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, episodeDue, museNeed, numberEpisodes, parseModel, parseSkits, seedLine, skitPrompt, storyOf } from '../src/muse'
+import { ACTIONS, BACKDROPS, CAPTION_W, EPISODE_EVERY_MS, upgradeSkit, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, episodeDue, museNeed, numberEpisodes, parseModel, parseSkits, seedLine, skitPrompt, storyOf } from '../src/muse'
 import type { Muse, MuseSkit } from '../src/muse'
 import { SHOW_ROWS, nextStage, showScene, stretchAt } from '../src/show'
 import { castAt, skitLength, skitScene } from '../src/stage'
@@ -567,6 +567,12 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   const numbered = parseSkits(JSON.stringify({ skits: [{ title: 'Ep4: The Folded Ladle', beats: [{ caption: 'Episode 1: Long-running cast', do: 'wave' }, { caption: 'Ep. 2', do: 'bow' }, { caption: '第3集：汤', do: 'bow' }] }] }), 'think')[0]!
   expect(numbered.title).toBe('The Folded Ladle')
   expect(numbered.beats.map(b => b.caption)).toEqual(['Long-running cast', undefined, '汤'])
+  // Skits kept before that check lose their numbers when read back.
+  const keptBefore: MuseSkit = { ...numbered, title: 'Ep2: The Green Gumbo', beats: [{ ...numbered.beats[0]!, caption: 'Ep2: dinner at cursed CI' }, { ...numbered.beats[1]!, caption: 'Episode 3' }] }
+  const read = upgradeSkit(keptBefore)
+  expect(read.title).toBe('The Green Gumbo')
+  expect(read.beats.map(b => b.caption)).toEqual(['dinner at cursed CI', undefined])
+  expect(upgradeSkit(numbered)).toBe(numbered)
 
   // The first skit of each reply is the next episode; the second stands alone.
   let kept = numberEpisodes(one, { skits: [] })
@@ -589,6 +595,9 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   expect(prompt).toContain('a setup, then trouble or a twist')
   expect(skitPrompt('edit', undefined, 'en', 7, storyOf({ skits: [] }))).toContain('episode 1 of a new series')
   expect(prompt).toContain('never mention episodes')
+  expect(prompt).toContain('Anyone the story names')
+  expect(prompt).toContain('a regular may sit the episode out')
+  expect(prompt).toContain('Keep one thread running across episodes')
 
   // A new episode is due when none was made lately: then every chance asks, whatever the seed.
   const t0 = 4_000_000_000_000

@@ -236,6 +236,23 @@ export const EPISODE_EVERY_MS = 8 * 60_000
 
 /** A skit kept before casts and beats of several acts (one Clawd, a beat a deed) in today's shape. */
 export function upgradeSkit(skit: MuseSkit): MuseSkit {
+  return withoutNumbers(reshaped(skit))
+}
+
+/** A kept skit with any episode number the model wrote into its title or captions taken out (kept before that was checked). */
+function withoutNumbers(skit: MuseSkit): MuseSkit {
+  const title = unnumbered(skit.title) ?? skit.title
+  const beats = skit.beats.map(b => {
+    if (!b.caption) return b
+    const caption = unnumbered(b.caption)
+    if (caption === b.caption) return b
+    const { caption: _, ...rest } = b
+    return caption ? { ...rest, caption } : rest
+  })
+  return title === skit.title && beats.every((b, i) => b === skit.beats[i]) ? skit : { ...skit, title, beats }
+}
+
+function reshaped(skit: MuseSkit): MuseSkit {
   const old = skit as unknown as { look?: MuseLook | null; cast?: SkitActor[]; beats: (SkitBeat & Partial<SkitAct>)[] }
   if (Array.isArray(old.cast) && old.beats.every(b => Array.isArray(b.acts))) return skit
   return {
@@ -337,9 +354,11 @@ function storyLines(story: Story | undefined): string[] {
     const last = story.previously[story.previously.length - 1]!
     out.push(
       `The first skit is episode ${last.episode + 1} of an ongoing series. Previously: ${story.previously.map(p => `ep. ${p.episode} "${p.title}": ${p.summary}`).join(' ')} ` +
-        `Pick up from there (a running gag, a rival coming back, a quest going on) with its regulars: ${story.cast.map(a => `${a.name} (${a.color})`).join(', ')}; keep their names and colors, one guest may join. The second skit stands on its own.`,
+        `Pick up from there with its regulars: ${story.cast.map(a => `${a.name} (${a.color})`).join(', ')}; keep their names and colors. ` +
+        `Keep one thread running across episodes (a rival, a mystery, a quest) that builds for a few episodes and then pays off, and start a new one after. ` +
+        `Anyone the story names (a rival, a guest, someone from the summaries) is on stage as a cast member, not only talked about; with at most ${MAX_CAST} on stage, a regular may sit the episode out to make room. The second skit stands on its own.`,
     )
-  } else out.push('The first skit is episode 1 of a new series: introduce its regular cast, with names worth coming back to. The second skit stands on its own.')
+  } else out.push('The first skit is episode 1 of a new series: introduce its regular cast, with names worth coming back to, and start a thread (a rival, a mystery, a quest) that later episodes can build on. The second skit stands on its own.')
   if (story && story.news.length > 0) out.push(`Lately in the coding session: ${story.news.join('; ')}. Work that into the first skit: its trouble, its twist or its ending.`)
   return out
 }
