@@ -5,6 +5,7 @@ import { blank, frame, mod, noise, put, textWidth } from './cells'
 import type { Grid, Style } from './cells'
 import type { Muse } from './muse'
 import { SHOW_ROWS, showScene } from './show'
+import type { Stage } from './show'
 
 export * from './cells'
 
@@ -34,9 +35,10 @@ export type Theme = {
   /**
    * The band's scene while a turn runs: `rows` rows of `w` cells. `tool`
    * (`shell: npm test`) lets it act out the tool, `muse` is what a model wrote
-   * for it (muse.ts), and `seed` makes each turn its own.
+   * for it (muse.ts), `seed` makes each turn its own, and `stage` is the work
+   * the show plays for (show.ts, `nextStage`).
    */
-  scene: (t: number, w: number, act: Act, tool?: string, muse?: Muse, seed?: number) => Grid
+  scene: (t: number, w: number, act: Act, tool?: string, muse?: Muse, seed?: number, stage?: Stage) => Grid
 }
 
 /** Milliseconds per frame: the mascot's, the band's. */

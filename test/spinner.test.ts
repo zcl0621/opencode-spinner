@@ -238,10 +238,14 @@ test('timers: the finale clears after FINALE_MS, the pet dozes off after five qu
   }
 })
 
-const TRICKS = JSON.stringify({ tricks: [{ name: 'Git Push Grind', kind: 'grind', frames: ['tail'], points: 700 }] })
-const SCENES = JSON.stringify({ vignettes: [{ caption: 'Brewing', pose: 'work', colors: { A: '#7aa2f7' }, frames: [['AAAA', 'A..A']] }] })
-/** What a model would write for either prompt. */
-const reply = (prompt: string) => ({ text: prompt.includes('skateboarding') ? TRICKS : SCENES })
+/** What a model would write for a skit prompt (hand-written here for the tests). */
+const SKITS = JSON.stringify({
+  skits: [
+    { title: 'Bug hunt', props: [{ id: 'bug', x: 0.6, colors: { K: '#9ece6a' }, frames: [['.KK.', 'KKKK']] }], beats: [{ do: 'walk', prop: 'bug', secs: 2 }, { do: 'throw', prop: 'bug', secs: 2, effect: 'sparks', say: 'out!' }] },
+    { title: 'Coffee break', beats: [{ do: 'sit', secs: 3 }, { do: 'cheer', secs: 2, effect: 'steam' }] },
+  ],
+})
+const reply = (_prompt: string) => ({ text: SKITS })
 
 test('the muse: asked at a turn\'s start with a seed and what the agent does; what it writes is kept', async () => {
   const asked: { prompt: string; model: unknown }[] = []
@@ -253,19 +257,19 @@ test('the muse: asked at a turn\'s start with a seed and what the agent does; wh
   expect(asked.length).toBe(1)
   expect(asked[0]!.model).toEqual({ providerID: 'anthropic', id: 'claude-haiku-4-5' })
   expect(asked[0]!.prompt).toContain(`Random seed ${spinner.lastSeed()!.seed}`)
-  const kept = () => spinner.muse().tricks.length + spinner.muse().vignettes.length
-  expect(kept()).toBe(1)
-  expect(spinner.museState()).toMatchObject({ isBusy: false, error: null, via: 'anthropic/claude-haiku-4-5', made: 1 })
+  expect(asked[0]!.prompt).toContain('thinking the task over')
+  expect(spinner.muse().skits.map(k => [k.kind, k.title])).toEqual([['think', 'Bug hunt'], ['think', 'Coffee break']])
+  expect(spinner.museState()).toMatchObject({ isBusy: false, error: null, via: 'anthropic/claude-haiku-4-5', made: 2 })
   // Asked lately: a tool call does not ask again.
   emit('session.tool.input.started', { sessionID: S, id: 'c1', name: 'shell' })
   emit('session.tool.called', { sessionID: S, id: 'c1', input: { command: 'bun test' } })
   await Bun.sleep(0)
   expect(asked.length).toBe(1)
-  // Forced, it asks for the kind it has fewer of, with the tool in the prompt.
+  // Forced, it asks for skits about the work at hand, the tool in the prompt.
   await spinner.inspireNow(S)
+  expect(asked[1]!.prompt).toContain('running shell commands')
   expect(asked[1]!.prompt).toContain('shell: bun test')
-  expect(spinner.muse().tricks.length).toBe(1)
-  expect(spinner.muse().vignettes.length).toBe(1)
+  expect(spinner.muse().skits.map(k => k.kind)).toEqual(['shell', 'shell', 'think', 'think'])
 })
 
 test('the muse: off without a model; the session by default; the free tier falls back to the session', async () => {
@@ -295,15 +299,15 @@ test('the muse: off without a model; the session by default; the free tier falls
 })
 
 test('the muse: a reply with nothing usable, or an error, is reported and drops nothing', async () => {
-  let answer: () => Promise<{ text: string }> = async () => ({ text: TRICKS + SCENES })
+  let answer: () => Promise<{ text: string }> = async () => ({ text: SKITS })
   const client = { generate: { text: () => answer() } }
   const { spinner } = start({ model: 'a/b' }, {}, client)
-  answer = async () => ({ text: 'Sorry, I cannot help with skateboarding.' })
+  answer = async () => ({ text: 'Sorry, I cannot help with skits.' })
   await expect(spinner.inspireNow(S)!).rejects.toThrow('nothing usable')
   expect(spinner.museState().error).toContain('nothing usable')
   answer = () => Promise.reject(new Error('Model unavailable: a/b'))
   await expect(spinner.inspireNow(S)!).rejects.toThrow('Model unavailable')
-  expect(spinner.muse().tricks.length + spinner.muse().vignettes.length).toBe(0)
+  expect(spinner.muse().skits.length).toBe(0)
   expect(spinner.museState().isBusy).toBe(false)
 })
 

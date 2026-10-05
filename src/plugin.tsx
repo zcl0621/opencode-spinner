@@ -8,14 +8,17 @@ import { useTerminalDimensions } from '@opentui/solid'
 import { createMemo, createSignal, onCleanup, Show } from 'solid-js'
 
 import { parseCommand } from './command'
-import { readConfig } from './config'
+import { pixelModeOf, readConfig } from './config'
 import { GridRows, SegRows } from './grid'
 import { m, resolveLanguage, setLang } from './i18n'
 import { levelOf } from './pet'
 import { PET_ROWS } from './pets'
+import { kindOf } from './muse'
+import { nextStage } from './show'
+import type { Stage } from './show'
 import { createSpinner } from './spinner'
 import type { Spinner } from './spinner'
-import { SPRITE_MS, STAGE_MS, THEME, finaleScene, frame, padTo, poseOf, textWidth } from './themes'
+import { SPRITE_MS, STAGE_MS, THEME, finaleScene, frame, padTo, poseOf, setPixels, textWidth } from './themes'
 import type { DockPet } from './types'
 
 /** Below this many columns, or this many terminal rows, the band draws the pet in one row. */
@@ -57,6 +60,7 @@ export default Plugin.define({
   id: 'opencode-spinner',
   setup(context) {
     const config = readConfig(context.options)
+    setPixels(pixelModeOf(config.pixels, process.env))
     setLang(resolveLanguage(config.language, undefined, [process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG]))
     const spinner = createSpinner(context, config)
 
@@ -104,6 +108,8 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
   })
   let keyed = ''
   let base = 0
+  // What the show plays for, latched as the agent's work changes (show.ts).
+  let stage: Stage | undefined
   const grid = createMemo(() => {
     const sc = scene()
     if (!sc) return null
@@ -112,10 +118,13 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
     if (sceneKey() !== keyed) {
       keyed = sceneKey()
       base = t()
+      stage = undefined
     }
     const tick = t() - base
     if (sc.finale) return finaleScene(sc.finale.kind, sc.finale.label, tick, w)
-    return THEME.scene(tick, w, sc.act, s.toolOf(sid()), s.muse(), s.run(sid()).seed)
+    const tool = s.toolOf(sid()) || undefined
+    stage = nextStage(stage, kindOf(sc.act, tool), tick, s.muse())
+    return THEME.scene(tick, w, sc.act, tool, s.muse(), s.run(sid()).seed, stage)
   })
 
   return (
@@ -266,7 +275,7 @@ function Commands(props: { context: Plugin.Context; spinner: Spinner }) {
     const kept = s.muse()
     if (model) {
       const via = muse.via === 'session' && model.toLowerCase() !== 'session' ? ` ${m('cmd.museVia')}` : ''
-      lines.push(`${m('cmd.museOn', { model, tricks: kept.tricks.length, scenes: kept.vignettes.length })}${muse.isBusy ? ` ${m('cmd.museBusy')}` : ''}${via}`)
+      lines.push(`${m('cmd.museOn', { model, skits: kept.skits.length })}${muse.isBusy ? ` ${m('cmd.museBusy')}` : ''}${via}`)
       if (muse.error) lines.push(m('cmd.museError', { error: muse.error }))
     } else lines.push(m('cmd.museOff'))
     const tap = s.tap()

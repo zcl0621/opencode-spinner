@@ -1,20 +1,46 @@
-// The pure parts: the show (bench and skatepark), the finale, the pet's
-// frames, the sound seed, the muse, the labels and `/spinner`'s arguments.
+// The pure parts: the show (the bench and the skits), the pixels, the finale,
+// the pet's frames, the sound seed, the muse, the labels and `/spinner`'s arguments.
 import { expect, test } from 'bun:test'
 
 import { AUDIO_BANDS, SoundSeed, lineSplitter, parseTapLine, seedFrom } from '../src/audio'
-import { VIGNETTES, benchScene, museVignette, poolOf, toolKind, vignetteAt } from '../src/clawd'
-import { RUN_LENGTH, SKATE_ROWS, obstacleAt, skateScene } from '../src/skate'
-import { MUSE_LOW, lightestVariant, PROP_H, PROP_W, activityOf, clawdPrompt, jsonOf, museNeed, parseModel, parseTricks, parseVignettes, seedLine, skatePrompt } from '../src/muse'
-import type { Muse } from '../src/muse'
-import { SHOW_ROWS, showScene, stretchAt } from '../src/show'
+import { canvas, cells, dot, octantBits, plot } from '../src/cells'
+import { VIGNETTES, benchScene, poolOf, toolKind, vignetteAt } from '../src/clawd'
+import { HAT_W, MUSE_LOW, PROP_H, PROP_W, jsonOf, kindOf, lightestVariant, museNeed, parseModel, parseSkits, seedLine, skitPrompt } from '../src/muse'
+import type { Muse, MuseSkit } from '../src/muse'
+import { SHOW_ROWS, nextStage, showScene, stretchAt } from '../src/show'
+import { skitLength, skitScene } from '../src/stage'
 import { parseCommand } from '../src/command'
-import { readConfig } from '../src/config'
+import { pixelModeOf, readConfig } from '../src/config'
 import { parseLanguage, resolveLanguage } from '../src/lang'
 import { busyLabel, formatDuration, levelOf, newsOf, toolLabel } from '../src/pet'
 import { CLAWD_PET, PET_ROWS, PET_W, dockPetOf } from '../src/pets'
 import { THEME, finaleScene, segments, textWidth } from '../src/themes'
 import type { Act } from '../src/themes'
+
+/** A skit as a model might write it (hand-written here for the tests). */
+const SKIT_REPLY = JSON.stringify({
+  skits: [
+    {
+      title: 'Night fishing for bugs',
+      place: { backdrop: 'sea', sky: 'moon', weather: 'stars', colors: { far: '#1f2a44', near: '#3d59a1', ground: '#6b5a48', accent: '#e0af68' } },
+      look: { eyes: 'normal', colors: { A: '#e0af68', B: '#8c6a3f' }, hat: ['....BBBB....', '..BAAAAAAB..', 'BBBBBBBBBBBB'], held: [] },
+      props: [
+        { id: 'bucket', x: 0.75, motion: 'still', colors: { G: '#9aa5ce', D: '#565f89' }, frames: [['.DDDDDD.', 'DGGGGGGD', '.DGGGGD.', '..DDDD..']] },
+        { id: 'Bug', x: 0.45, motion: 'float', colors: { K: '#9ece6a', E: '#1a1b26' }, frames: [['..KK..', '.KEEK.', 'KKKKKK'], ['K.KK.K', '.KEEK.', 'KKKKKK']] },
+      ],
+      beats: [
+        { do: 'walk', to: 0.3, secs: 2, effect: 'none', say: '' },
+        { do: 'look', prop: 'bug', secs: 2, effect: 'question', say: 'a bug?' },
+        { do: 'carry', prop: 'bug', to: 0.7, secs: 3, effect: 'sparks', say: 'gotcha' },
+        { do: 'throw', prop: 'bug', secs: 3, effect: 'none', say: '' },
+        { do: 'push', prop: 'bucket', to: 0.1, secs: 3, effect: 'smoke', say: '' },
+        { do: 'cheer', secs: 2, effect: 'confetti', say: 'fixed!' },
+        { do: 'sleep', secs: 2, effect: 'none', say: '' },
+      ],
+    },
+  ],
+})
+const SKITS = (kind: Parameters<typeof parseSkits>[1] = 'think') => parseSkits(SKIT_REPLY, kind)
 
 const widthOf = (row: Parameters<typeof segments>[0]) => textWidth(segments(row).map(s => s.text).join(''))
 
@@ -34,34 +60,80 @@ test('the show and the finale fill exactly their width and rows, every frame', (
   for (const frames of Object.values(THEME.sprite)) expect(frames.length).toBeGreaterThan(0)
 })
 
-test('the show: bench visits and skate runs take turns, in an order the seed picks', () => {
-  const kinds = (seed: number) => {
+test('the show: the bench, then skits for the work at hand, in an order the seed picks', () => {
+  const lengths = [120, 80, 200]
+  const order = (seed: number, ls: readonly number[]) => {
     const out: string[] = []
-    let last = -1
+    let last = ''
     for (let t = 0; t < 20_000; t += 5) {
-      const s = stretchAt(t, 80, seed)
-      if (s.salt !== last) out.push(s.kind)
-      last = s.salt
+      const s = stretchAt(t, 80, seed, ls)
+      const id = `${s.salt}`
+      if (id !== last) out.push(s.skit === null ? 'bench' : `skit${s.skit}`)
+      last = id
     }
     return out
   }
-  const a = kinds(1)
-  expect(a.length).toBeGreaterThan(40)
-  expect(a.filter(k => k === 'skate').length).toBeGreaterThan(5)
-  expect(a.filter(k => k === 'bench').length).toBeGreaterThan(5)
-  expect(kinds(2).join()).not.toBe(a.join())
-  expect(kinds(1).join()).toBe(a.join())
-  // A skate stretch is one run, from a drop-in deck: its tick 0 shows the drop-in.
-  for (let seed = 0; seed < 50; seed++) {
-    const s = stretchAt(0, 80, seed)
-    if (s.kind === 'skate') expect(s.local).toBe(0)
-  }
-  expect(RUN_LENGTH).toBeGreaterThan(100)
-  // An ask always shows him at the bench, sign up, even in a run.
+  const a = order(1, lengths)
+  expect(a[0]).toMatch(/^skit/)
+  expect(a.filter(k => k === 'bench').length).toBeGreaterThan(3)
+  expect(new Set(a.filter(k => k !== 'bench')).size).toBe(3)
+  expect(order(2, lengths).join()).not.toBe(a.join())
+  expect(order(1, lengths).join()).toBe(a.join())
+  // No skits: only the bench.
+  expect(new Set(order(1, []))).toEqual(new Set(['bench']))
+
+  // The stage holds to a kind of work a while, and takes new work only once it settles.
+  const muse: Muse = { skits: [...SKITS('edit'), ...SKITS('think')] }
+  let stage = nextStage(undefined, 'think', 0, muse)
+  expect(stage).toEqual({ kind: 'think', since: 0, count: 1 })
+  for (let t = 1; t < 40; t++) stage = nextStage(stage, t % 2 ? 'edit' : 'think', t, muse)
+  expect(stage.kind).toBe('think')
+  for (let t = 40; t < 120; t++) stage = nextStage(stage, 'edit', t, muse)
+  expect(stage.kind).toBe('edit')
+  expect(stage.since).toBeGreaterThanOrEqual(60)
+  expect(nextStage(stage, null, 500, muse)).toEqual(stage)
+
+  // A skit for the work comes on when it changes; an ask always shows the bench, sign up.
+  const show = showScene(stage.since + 5, 80, 'tool', 'edit: a.ts', muse, 3, stage)
+  expect(show.map(r => r.map(c => c.ch).join('')).join('')).toContain('Night fishing')
   for (let seed = 0; seed < 30; seed++) {
-    const g = showScene(10, 80, 'ask', undefined, undefined, seed)
-    expect(g.map(r => r.map(c => c.ch).join('')).join('\n')).not.toContain('SCORE')
+    const g = showScene(stage.since + 5, 80, 'ask', undefined, muse, seed, stage)
+    expect(g.map(r => r.map(c => c.ch).join('')).join('')).not.toContain('Night fishing')
   }
+})
+
+test('pixels: fine ones in octants, two colors a cell; coarse ones in half blocks', () => {
+  const cv = canvas(4, 1)
+  dot(cv, 0, 0, '#ff0000')
+  dot(cv, 1, 3, '#ff0000')
+  plot(cv, 2, 0, '#00ff00')
+  const fine = cells(cv, 'fine')[0]!
+  expect(octantBits(fine[0]!.ch)).toBe(1 | 128)
+  expect(fine[0]!.c).toBe('#ff0000')
+  expect(fine[1]).toEqual({ ch: ' ' })
+  expect(fine[2]).toEqual({ ch: '▀', c: '#00ff00' })
+  // Every pattern has its own character.
+  const chars = new Set<string>()
+  for (let bits = 1; bits < 256; bits++) {
+    const c = canvas(1, 1)
+    for (let i = 0; i < 8; i++) if (bits & (1 << i)) dot(c, i % 2, Math.floor(i / 2), '#ffffff')
+    const ch = cells(c, 'fine')[0]![0]!.ch
+    expect(octantBits(ch)).toBe(bits)
+    chars.add(ch)
+  }
+  expect(chars.size).toBe(255)
+  // Three colors in a cell: the odd one out joins the nearer of the two kept.
+  const three = canvas(1, 1)
+  for (let i = 0; i < 4; i++) dot(three, i % 2, Math.floor(i / 2), '#ff0000')
+  for (let i = 4; i < 7; i++) dot(three, i % 2, Math.floor(i / 2), '#0000ff')
+  dot(three, 1, 3, '#ee0000')
+  const mixed = cells(three, 'fine')[0]![0]!
+  expect([octantBits(mixed.ch), mixed.c, mixed.bg]).toEqual([15 | 128, '#ff0000', '#0000ff'])
+  // Coarse: whole pixels as before; a lone fine pixel still shows.
+  expect(cells(cv, 'coarse')[0]!.map(c => c.ch).join('')).toBe('█ ▀ ')
+  expect(pixelModeOf('auto', { TERM_PROGRAM: 'ghostty' })).toBe('fine')
+  expect(pixelModeOf('auto', { TERM_PROGRAM: 'Apple_Terminal' })).toBe('coarse')
+  expect(pixelModeOf('fine', {})).toBe('fine')
 })
 
 test('the sound seed: tap lines stir it while something plays; quiet falls back to crypto', () => {
@@ -153,7 +225,10 @@ test('options and language', () => {
     language: 'auto',
     model: 'session',
     hasSoundSeed: true,
+    pixels: 'auto',
   })
+  expect(readConfig({ pixels: 'fine' }).pixels).toBe('fine')
+  expect(readConfig({ pixels: 'huge' }).pixels).toBe('auto')
   expect(readConfig({ model: ' anthropic/claude-haiku-4-5 ' }).model).toBe('anthropic/claude-haiku-4-5')
   expect(readConfig({ model: false }).model).toBeNull()
   expect(readConfig({ model: 'off' }).model).toBeNull()
@@ -173,7 +248,7 @@ test('clawd: every vignette, walk and tool fills the width, every frame', () => 
   const acts: Act[] = ['think', 'tool', 'ask', 'say', 'wait']
   for (const w of [16, 30, 47, 80, 160]) {
     for (let t = 0; t < 1200; t += 3) {
-      const scene = benchScene(t, w, acts[t % acts.length]!, tools[t % tools.length], undefined, t % 5)
+      const scene = benchScene(t, w, acts[t % acts.length]!, tools[t % tools.length], t % 5)
       expect(scene).toHaveLength(4)
       for (const row of scene) expect(widthOf(row)).toBe(w)
     }
@@ -220,137 +295,109 @@ test('clawd: a turn (tick 0) opens with him at work, for any width with room', (
   }
 })
 
-test('skate: every frame fills the width and its rows, at any width', () => {
-  for (const w of [12, 30, 61, 120]) {
-    for (const act of ['think', 'tool', 'ask', 'say'] as Act[]) {
-      for (let t = 0; t < 600; t += 3) {
-        const g = skateScene(t, w, act)
-        expect(g.length).toBe(SKATE_ROWS)
-        for (const row of g) expect(widthOf(row)).toBe(w)
-      }
-    }
-  }
-})
-
-test('skate: the park has every obstacle, he throws many tricks, and sometimes bails', () => {
-  const kinds = new Set<string>()
-  for (let i = 0; i < 200; i++) kinds.add(obstacleAt(i, 'tool').kind)
-  expect([...kinds].sort()).toEqual(['drop', 'handrail', 'kicker', 'manual', 'pyramid', 'rail', 'stairs'])
-  const labels = new Set<string>()
-  for (let t = 0; t < 20_000; t += 2) {
-    const top = skateScene(t, 100, 'tool')[0]!.map(c => c.ch).join('')
-    const m = top.match(/([A-Z0-9][A-Z0-9 -]*?) \+\d+|BAIL!/)
-    if (m) labels.add(m[1] ?? 'BAIL!')
-  }
-  for (const trick of ['KICKFLIP', '360 FLIP', 'HEELFLIP', 'POP SHOVE-IT', 'DROP IN', 'MANUAL', 'BAIL!']) expect(labels).toContain(trick)
-  expect([...labels].filter(l => /GRIND|SLIDE|5-0|50-50/.test(l)).length).toBeGreaterThan(3)
-  expect(labels.size).toBeGreaterThan(15)
-})
-
 test('muse: model ids, prompts, and replies read strictly', () => {
   expect(parseModel('anthropic/claude-haiku-4-5')).toEqual({ providerID: 'anthropic', id: 'claude-haiku-4-5' })
   expect(parseModel('openrouter/qwen/qwen3-8b')).toEqual({ providerID: 'openrouter', id: 'qwen/qwen3-8b' })
   expect(parseModel('session')).toBe('session')
+  for (const off of ['off', '', 'nope', '/x', 'x/', null, 3]) expect(parseModel(off)).toBeNull()
   expect(lightestVariant(['low', 'high', 'max'])).toBe('low')
   expect(lightestVariant(['minimal', 'low', 'medium'])).toBe('minimal')
   expect(lightestVariant(['high', 'max'])).toBeUndefined()
-  expect(lightestVariant([])).toBeUndefined()
-  expect(skatePrompt('thinking', 1)).toContain('no long thinking')
-  for (const off of ['off', '', 'nope', '/x', 'x/', null, 3]) expect(parseModel(off)).toBeNull()
-  expect(activityOf('tool', 'shell: bun test')).toContain('shell: bun test')
-  expect(skatePrompt('thinking', 7)).toContain('"tricks"')
-  expect(skatePrompt('thinking', 7)).toContain('Random seed 7')
+  expect(kindOf('tool', 'grep: TODO')).toBe('search')
+  expect(kindOf('tool', 'subagent ×3')).toBe('agent')
+  expect(kindOf('say')).toBe('say')
+  expect(kindOf('think')).toBe('think')
+  expect(kindOf('ask')).toBeNull()
+  const prompt = skitPrompt('shell', 'shell: bun test', 'zh-Hans', 7)
+  for (const part of ['no long thinking', 'running shell commands', 'shell: bun test', 'Random seed 7', 'Simplified Chinese', '"skits"']) expect(prompt).toContain(part)
   expect(seedLine(1)).not.toBe(seedLine(2))
-  expect(clawdPrompt('thinking', 'zh-Hans', 7)).toContain('Simplified Chinese')
   expect(jsonOf('Sure!\n```json\n{"a":1}\n```')).toEqual({ a: 1 })
   expect(jsonOf('no json here')).toBeNull()
 
-  const tricks = parseTricks(JSON.stringify({
-    tricks: [
-      { name: 'Git Push Grind', kind: 'grind', frames: ['tail'], points: 777 },
-      { name: 'Null Pointer Flip', kind: 'flip', frames: ['grip', 'under', 'bogus'], points: 99999 },
-      { name: 'Way too long a trick name to show at all', kind: 'grab', frames: [], points: 'x' },
-      { name: 'Short', kind: 'flip', frames: [] },
-      { name: '', kind: 'flip', frames: ['flat'] },
-      { name: 'Bad kind', kind: 'teleport', frames: ['flat'] },
-      { name: 'Lazy manual', kind: 'manual', frames: ['grip'] },
-    ],
-  }))
-  expect(tricks.map(t => t.name)).toEqual(['Git Push Grind', 'Null Pointer Flip', 'Way too long a trick na', 'Lazy manual'].map(n => n.slice(0, 22).trim()))
-  expect(tricks[0]).toEqual({ name: 'Git Push Grind', kind: 'grind', frames: ['tail'], points: 800 })
-  expect(tricks[1]!.frames).toEqual(['flat', 'grip', 'under', 'flat'])
-  expect(tricks[1]!.points).toBe(2000)
-  expect(tricks[2]!.frames).toEqual(['flat'])
-  expect(tricks[3]!.frames).toEqual(['flat'])
+  const [skit] = SKITS('think')
+  expect(skit!.kind).toBe('think')
+  expect(skit!.title).toBe('Night fishing for bugs')
+  expect(skit!.place!.backdrop).toBe('sea')
+  expect(skit!.look!.hat.length).toBe(3)
+  expect(skit!.props.map(p => p.id)).toEqual(['bucket', 'bug'])
+  expect(skit!.beats.map(b => b.do)).toEqual(['walk', 'look', 'carry', 'throw', 'push', 'cheer', 'sleep'])
+  expect(skitLength(skit!)).toBe(170)
 
-  const vignettes = parseVignettes(JSON.stringify({
-    vignettes: [
-      { caption: 'Brewing coffee for the build', pose: 'work', colors: { A: '#7aa2f7', B: '#e0af68', c: '#ffffff', D: 'red' }, frames: [['..AAAA..', '..AXXA..', 'BBBBBBBBBBBBBBBBBB', 'B', 'B', 'B', 'B'], ['....']] },
-      { caption: 'No colors', colors: {}, frames: [['AAAA']] },
-      { caption: 'No pixels', colors: { A: '#ffffff' }, frames: [['....']] },
-    ],
-  }))
-  expect(vignettes.length).toBe(1)
-  const v = vignettes[0]!
-  expect(v.caption.length).toBeLessThanOrEqual(20)
-  expect(Object.keys(v.colors)).toEqual(['A', 'B', 'C'])
-  expect(v.frames.length).toBe(1)
-  expect(v.frames[0]!.length).toBe(PROP_H)
-  expect(v.frames[0]![1]).toBe('..A..A..')
-  for (const row of v.frames[0]!) expect(row.length).toBeLessThanOrEqual(PROP_W)
-  expect(museVignette(v)).toBe(museVignette(v))
+  // Strict on content, lenient on form.
+  const odd = parseSkits(JSON.stringify({ skits: [
+    {
+      title: 'A title far too long to fit on the stage at all',
+      place: { backdrop: 'volcano', colors: { far: '#123', near: '#456', ground: '#789', accent: '#abcdef80' } },
+      look: { eyes: 'normal', hat: [], held: [] },
+      props: [
+        { id: 'x', frames: ['AAA|.B.', 'zzz'], colors: { a: '#ff0000', B: '#00ff00', C: 'red' }, x: 7, motion: 'teleport' },
+        { id: 'x', frames: [['AAA']], colors: { A: '#ffffff' } },
+        { id: 'empty', frames: [['...']], colors: { A: '#ffffff' } },
+        { id: 'big', frames: [['A'.repeat(60), ...new Array(30).fill('A')]], colors: { A: '#ffffff' } },
+      ],
+      beats: [
+        { do: 'carry', prop: 'ghost', secs: 99, effect: 'nuke', say: '<a line>' },
+        { do: 'fly', secs: 2 },
+        { do: 'throw', secs: 2, say: 'hi\nthere' },
+        { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 }, { do: 'wave', secs: 6 },
+      ],
+    },
+    { title: 'One beat', beats: [{ do: 'wave', secs: 2 }] },
+    { title: '<title>', beats: [{ do: 'wave' }, { do: 'jump' }] },
+  ] }), 'edit')
+  expect(odd.length).toBe(1)
+  const o = odd[0]!
+  expect(o.title.length).toBeLessThanOrEqual(24)
+  expect(o.place).toEqual({ backdrop: 'none', sky: 'none', weather: 'clear', colors: { far: '#112233', near: '#445566', ground: '#778899', accent: '#abcdef' } })
+  expect(o.look).toBeNull()
+  expect(o.props.map(p => p.id)).toEqual(['x', 'big'])
+  expect(o.props[0]).toEqual({ id: 'x', frames: [['AAA', '.B.']], colors: { A: '#ff0000', B: '#00ff00' }, x: 1, motion: 'still' })
+  expect(o.props[1]!.frames[0]!.length).toBe(PROP_H)
+  expect(o.props[1]!.frames[0]![0]!.length).toBe(PROP_W)
+  expect(o.beats.map(b => b.do)).toEqual(['walk', 'stand', 'wave', 'wave', 'wave'])
+  expect(o.beats[0]).toEqual({ do: 'walk', to: null, prop: null, effect: 'none', say: '', secs: 6 })
+  expect(o.beats[1]!.say).toBe('hi there')
+  expect(o.beats.reduce((n, b) => n + b.secs, 0)).toBeLessThanOrEqual(30)
+  expect(HAT_W).toBe(28)
 })
 
-test('muse: skate and clawd draw what it wrote, every frame the full width', () => {
-  const muse: Muse = {
-    tricks: parseTricks(JSON.stringify({ tricks: [
-      { name: 'Git Push Grind', kind: 'grind', frames: ['tail'], points: 700 },
-      { name: 'Null Pointer Flip', kind: 'flip', frames: ['flat', 'grip', 'under', 'graphic', 'flat'], points: 900 },
-      { name: 'Merge Manual', kind: 'manual', frames: ['nose'], points: 300 },
-    ] })),
-    vignettes: parseVignettes(JSON.stringify({ vignettes: [
-      { caption: 'Brewing a build', pose: 'work', colors: { A: '#7aa2f7', B: '#e0af68' }, frames: [['.AAAA.', '.A..A.', 'BBBBBB'], ['.AAAA.', '.AAAA.', 'BBBBBB']] },
-    ] })),
+test('the theater: every skit frame fills the width and rows, and it acts the beats out', () => {
+  const skit = SKITS()[0]!
+  const bare: MuseSkit = { ...skit, place: null, look: null }
+  const texts: string[] = []
+  for (const s of [skit, bare]) {
+    for (const w of [16, 40, 81, 160]) {
+      for (let t = 0; t < skitLength(s) + 20; t += 3) {
+        const g = skitScene(s, t, w, 5)
+        expect(g).toHaveLength(SHOW_ROWS)
+        for (const row of g) expect(widthOf(row)).toBe(w)
+        if (w === 81) texts.push(g.map(r => r.map(c => c.ch).join('')).join('\n'))
+      }
+    }
   }
-  const labels = new Set<string>()
-  for (let t = 0; t < 8000; t += 2) {
-    const g = skateScene(t, 90, 'tool', muse)
-    for (const row of g) expect(widthOf(row)).toBe(90)
-    labels.add(g[0]!.map(c => c.ch).join(''))
-  }
-  const seen = [...labels].join('\n')
-  for (const name of ['GIT PUSH GRIND', 'NULL POINTER FLIP', 'MERGE MANUAL']) expect(seen).toContain(name)
-  let captions = 0
-  for (let t = 0; t < 4000; t += 2) {
-    const g = benchScene(t, 70, 'tool', 'shell: bun test', muse)
-    for (const row of g) expect(widthOf(row)).toBe(70)
-    if (g[0]!.map(c => c.ch).join('').includes('Brewing a build')) captions++
-  }
-  expect(captions).toBeGreaterThan(50)
-  // An ask keeps its sign.
-  for (let t = 0; t < 2000; t += 5) expect(benchScene(t, 70, 'ask', undefined, muse)[0]!.map(c => c.ch).join('')).not.toContain('Brewing')
+  const all = texts.join('\n')
+  for (const said of ['Night fishing', 'a bug?', 'gotcha', 'fixed!', '?', 'z']) expect(all).toContain(said)
 })
 
 test('muse: copies of the format example are dropped; the seed decides when to ask', () => {
-  const copy = JSON.stringify({ vignettes: [
-    { caption: '<caption>', colors: { A: '#7aa2f7', B: '#e0af68' }, frames: [['..AAAA..', '..A..A..', 'BBBBBBBB'], ['..AAAA..', '..AAAA..', 'BBBBBBBB']] },
-    { caption: 'Copied', colors: { A: '#7aa2f7', B: '#e0af68' }, frames: [['..AAAA..', '..A..A..', 'BBBBBBBB']] },
-  ] })
-  expect(parseVignettes(copy)).toEqual([])
-  // Lenient on form, strict on content: #rgb and #rrggbbaa, lowercase keys, a frame as one string.
-  const loose = parseVignettes(JSON.stringify({ vignettes: [{ caption: 'Loose', colors: { a: '#f80', B: '#11223344', C: 'red' }, frames: ['aaa.|.BB.|cccc', ['AaA', 'b.b']] }] }))
-  expect(loose).toEqual([{ caption: 'Loose', pose: 'work', colors: { A: '#ff8800', B: '#112233' }, frames: [['AAA.', '.BB.', '....'], ['AAA', 'B.B']] }])
-  expect(parseTricks(JSON.stringify({ tricks: [{ name: '<trick name>', kind: 'flip', frames: ['flat', 'grip', 'flat'] }] }))).toEqual([])
+  const lamp = [['...CCCC...', '..CCCCCC..', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...'], ['....CC....', '...CCCC...', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...']]
+  // The example's lamp, as sent and as a model once sent it back with a few pixels changed: dropped, and the beats that used it.
+  const edited = [['...CCC...', '..CCCC..', 'BBBBBBBBBB', '.BBBBBBB.', '...BBBB...']]
+  for (const frames of [lamp, edited]) {
+    const copy = JSON.stringify({ skits: [{ title: 'Copied', props: [{ id: 'lamp', colors: { B: '#7aa2f7', C: '#ffd166' }, frames }], beats: [{ do: 'carry', prop: 'lamp' }, { do: 'wave' }] }] })
+    const [skit] = parseSkits(copy, 'think')
+    expect(skit!.props).toEqual([])
+    expect(skit!.beats.map(b => [b.do, b.prop])).toEqual([['walk', null], ['wave', null]])
+  }
 
-  const trick = { name: 'x', kind: 'grab' as const, frames: ['flat' as const], points: 100 }
-  const scene = { caption: 'x', pose: 'work' as const, frames: [['AAA']], colors: { A: '#ffffff' } }
-  const empty: Muse = { tricks: [], vignettes: [] }
-  expect(museNeed(empty, 1)).toBe('tricks')
-  expect(museNeed(empty, 2)).toBe('vignettes')
-  expect(museNeed({ tricks: [trick], vignettes: [] }, 1)).toBe('vignettes')
-  const full: Muse = { tricks: new Array(MUSE_LOW).fill(trick), vignettes: new Array(MUSE_LOW).fill(scene) }
+  const empty: Muse = { skits: [] }
+  expect(museNeed(empty, 'edit', 1)).toBe(true)
+  const one = SKITS('edit')[0]!
+  const full: Muse = { skits: new Array(MUSE_LOW).fill(one) }
+  // Enough skits for edits, none for the shell.
+  expect(museNeed(full, 'shell', 1)).toBe(true)
   let asks = 0
-  for (let seed = 0; seed < 100 * 256; seed += 256) if (museNeed(full, seed)) asks++
+  for (let seed = 0; seed < 100 * 256; seed += 256) if (museNeed(full, 'edit', seed)) asks++
   expect(asks).toBeGreaterThan(20)
   expect(asks).toBeLessThan(50)
 })

@@ -60,6 +60,19 @@ export function put(g: Grid, x: number, y: number, text: string, style: Style = 
   }
 }
 
+/** Like `put`, but each character keeps the background of the pixels under it. */
+export function overlay(g: Grid, x: number, y: number, text: string, style: Style = {}): void {
+  const row = g[y]
+  if (!row) return
+  let col = Math.round(x)
+  for (const ch of text) {
+    const under = row[col]
+    const bg = under ? (under.ch === '█' ? under.c : under.bg) : undefined
+    put(g, col, y, ch, bg && !style.bg ? { ...style, bg } : style)
+    col += cpWidth(ch.codePointAt(0)!)
+  }
+}
+
 /** A row as runs of one style each, what a Text per run draws. */
 export function segments(row: Cell[]): Seg[] {
   const out: Seg[] = []
@@ -75,17 +88,45 @@ export function segments(row: Cell[]): Seg[] {
 
 // ---- pixels --------------------------------------------------------------
 
-/** Two pixels a cell, one above the other: `w` across, `rows * 2` down. */
-export type Canvas = { w: number; h: number; px: (string | undefined)[] }
+/**
+ * How pixels become cells. `coarse`: two a cell, one above the other, in half
+ * blocks every font has. `fine`: eight a cell (2 across, 4 down) in octants
+ * (Unicode 16), which only some terminals draw: pixels half as wide and half
+ * as tall, so art drawn with `drawFine` shows its detail.
+ */
+export type PixelMode = 'coarse' | 'fine'
+let pixelMode: PixelMode = 'coarse'
+export function setPixels(mode: PixelMode): void {
+  pixelMode = mode
+}
+export const pixels = () => pixelMode
 
-export function canvas(w: number, rows: number): Canvas {
-  return { w, h: rows * 2, px: new Array(w * rows * 2) }
+/**
+ * A canvas `w` pixels across and `rows * 2` down, each pixel 2 × 2 fine ones:
+ * `plot` and `draw` take whole pixels, `dot` and `drawFine` fine ones. With
+ * `oy`, drawing at y lands `oy` pixels lower: a scene drawn for a short canvas
+ * fits a taller one, with room above it.
+ */
+export type Canvas = { w: number; h: number; px: (string | undefined)[]; oy?: number }
+
+export function canvas(w: number, rows: number, oy = 0): Canvas {
+  return { w, h: rows * 2, px: new Array(w * rows * 8), oy }
+}
+
+/** A fine pixel: `fx`, `fy` count half pixels. */
+export function dot(cv: Canvas, fx: number, fy: number, color: string): void {
+  const x = Math.round(fx)
+  const y = Math.round(fy) + (cv.oy ?? 0) * 2
+  if (x >= 0 && x < cv.w * 2 && y >= 0 && y < cv.h * 2) cv.px[y * cv.w * 2 + x] = color
 }
 
 export function plot(cv: Canvas, x: number, y: number, color: string): void {
-  const px = Math.round(x)
-  const py = Math.round(y)
-  if (px >= 0 && px < cv.w && py >= 0 && py < cv.h) cv.px[py * cv.w + px] = color
+  const fx = Math.round(x) * 2
+  const fy = Math.round(y) * 2
+  dot(cv, fx, fy, color)
+  dot(cv, fx + 1, fy, color)
+  dot(cv, fx, fy + 1, color)
+  dot(cv, fx + 1, fy + 1, color)
 }
 
 /** Draws pixel art: each character of `art` a pixel colored by `colors`, `.` left clear. */
@@ -98,14 +139,98 @@ export function draw(cv: Canvas, x: number, y: number, art: readonly string[], c
   })
 }
 
-/** The canvas as cells: `▀` in the top pixel's color over the bottom one's. */
-export function cells(cv: Canvas): Grid {
-  const g = blank(cv.w, cv.h / 2)
-  for (let r = 0; r < cv.h / 2; r++) {
+/** Draws art of fine pixels, its top left at pixel (`x`, `y`) (halves allowed). */
+export function drawFine(cv: Canvas, x: number, y: number, art: readonly string[], colors: Record<string, string>): void {
+  const fx = Math.round(x * 2)
+  const fy = Math.round(y * 2)
+  art.forEach((line, j) => {
+    for (let i = 0; i < line.length; i++) {
+      const color = colors[line[i]!]
+      if (color) dot(cv, fx + i, fy + j, color)
+    }
+  })
+}
+
+/** Octants by pattern (bit `2 * row + column` of a cell's 2 × 4), where older block characters already draw it. */
+const OCTANT_OLD: Record<number, string> = {
+  0: ' ', 1: '\u{1CEA8}', 2: '\u{1CEAB}', 3: '\u{1FB82}', 5: '▘', 10: '▝', 15: '▀', 20: '\u{1FBE6}', 40: '\u{1FBE7}',
+  63: '\u{1FB85}', 64: '\u{1CEA3}', 80: '▖', 85: '▌', 90: '▞', 95: '▛', 128: '\u{1CEA0}', 160: '▗', 165: '▚',
+  170: '▐', 175: '▜', 192: '▂', 240: '▄', 245: '▙', 250: '▟', 252: '▆', 255: '█',
+}
+/** The rest are BLOCK OCTANT-…, from U+1CD00 in pattern order. */
+const OCTANTS: string[] = (() => {
+  const out: string[] = []
+  let next = 0x1cd00
+  for (let bits = 0; bits < 256; bits++) out.push(OCTANT_OLD[bits] ?? String.fromCodePoint(next++))
+  return out
+})()
+
+/** Which fine pixels a block character fills (bits as in OCTANTS), or null for any other character. */
+export function octantBits(ch: string): number | null {
+  const bits = OCTANTS.indexOf(ch)
+  return bits > 0 ? bits : null
+}
+
+const rgbOf = (hex: string) => {
+  const n = Number.parseInt(hex.slice(1, 7), 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255] as const
+}
+function distance(a: string, b: string): number {
+  const [r1, g1, b1] = rgbOf(a)
+  const [r2, g2, b2] = rgbOf(b)
+  return (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2
+}
+
+/** The commonest drawn color among some pixels, or clear when none is drawn: thin lines of fine art survive. */
+function commonest(px: (string | undefined)[]): string | undefined {
+  const counts = new Map<string | undefined, number>()
+  for (const p of px) if (p !== undefined) counts.set(p, (counts.get(p) ?? 0) + 1)
+  let best: string | undefined
+  let most = 0
+  for (const [p, n] of counts) if (n > most || (n === most && best === undefined)) [best, most] = [p, n]
+  return best
+}
+
+/** One cell of fine pixels (8, row by row) as an octant in at most two colors. */
+function octantCell(px: (string | undefined)[]): Cell {
+  const counts = new Map<string | undefined, number>()
+  for (const p of px) counts.set(p, (counts.get(p) ?? 0) + 1)
+  const ranked = [...counts].sort((a, b) => b[1] - a[1]).map(([p]) => p)
+  if (ranked.length === 1 && ranked[0] === undefined) return { ch: ' ' }
+  // The two commonest values stay; any other color joins the nearer drawn one.
+  const keep = ranked.slice(0, 2)
+  const drawn = keep.filter((p): p is string => p !== undefined)
+  const fg = drawn[0]!
+  const bg = keep.length > 1 ? keep.find(p => p !== fg) : undefined
+  let bits = 0
+  px.forEach((p, i) => {
+    let v = p
+    if (!keep.includes(v)) v = v === undefined ? bg : drawn.length > 1 && distance(v!, drawn[1]!) < distance(v!, fg) ? drawn[1] : fg
+    if (v === fg) bits |= 1 << i
+  })
+  if (bits === 255) return { ch: '█', c: fg }
+  return bg ? { ch: OCTANTS[bits]!, c: fg, bg } : { ch: OCTANTS[bits]!, c: fg }
+}
+
+/** The canvas as cells, in the pixel mode set (`setPixels`). */
+export function cells(cv: Canvas, mode: PixelMode = pixelMode): Grid {
+  const rows = cv.h / 2
+  const fw = cv.w * 2
+  const g = blank(cv.w, rows)
+  const fine = (fx: number, fy: number) => cv.px[fy * fw + fx]
+  for (let r = 0; r < rows; r++) {
+    const row = g[r]!
     for (let x = 0; x < cv.w; x++) {
-      const top = cv.px[2 * r * cv.w + x]
-      const bottom = cv.px[(2 * r + 1) * cv.w + x]
-      const row = g[r]!
+      if (mode === 'fine') {
+        const px: (string | undefined)[] = []
+        for (let dy = 0; dy < 4; dy++) for (let dx = 0; dx < 2; dx++) px.push(fine(x * 2 + dx, r * 4 + dy))
+        row[x] = octantCell(px)
+        continue
+      }
+      // Coarse: each pixel the commonest drawn of its four fine ones, two a cell in half blocks.
+      const pixel = (y: number) => commonest([fine(x * 2, y * 2), fine(x * 2 + 1, y * 2), fine(x * 2, y * 2 + 1), fine(x * 2 + 1, y * 2 + 1)])
+      const top = pixel(2 * r)
+      const bottom = pixel(2 * r + 1)
       if (top && bottom) row[x] = top === bottom ? { ch: '█', c: top } : { ch: '▀', c: top, bg: bottom }
       else if (top) row[x] = { ch: '▀', c: top }
       else if (bottom) row[x] = { ch: '▄', c: bottom }

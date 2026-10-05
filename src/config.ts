@@ -17,6 +17,17 @@ export type Config = {
   model: string | null
   /** Seeds from the sound playing (macOS), else from crypto alone. */
   hasSoundSeed: boolean
+  /** How pixels are drawn (cells.ts): `fine` octants, `coarse` half blocks, or `auto`: fine where the terminal is known to draw octants. */
+  pixels: 'auto' | 'fine' | 'coarse'
+}
+
+/** Terminals known to draw octants themselves (whatever the font), by TERM_PROGRAM. */
+const OCTANT_TERMINALS = ['ghostty']
+
+/** The pixel mode for `pixels` in a terminal with these environment variables. */
+export function pixelModeOf(pixels: Config['pixels'], env: Readonly<Record<string, string | undefined>>): 'fine' | 'coarse' {
+  if (pixels !== 'auto') return pixels
+  return OCTANT_TERMINALS.includes((env.TERM_PROGRAM ?? '').toLowerCase()) ? 'fine' : 'coarse'
 }
 
 const flag = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback)
@@ -35,5 +46,6 @@ export function readConfig(options: Readonly<Record<string, unknown>>): Config {
     language: text(options.language, 'auto'),
     model: ['off', 'none', 'false'].includes(model.toLowerCase()) ? null : model,
     hasSoundSeed: flag(options.sound, true),
+    pixels: options.pixels === 'fine' || options.pixels === 'coarse' ? options.pixels : 'auto',
   }
 }

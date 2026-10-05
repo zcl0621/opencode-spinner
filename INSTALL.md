@@ -14,13 +14,19 @@ If it prints `1.x`, stop and tell the person this plugin needs opencode 2 (the `
 
 `git` must be available. Nothing else is required: there is no `npm install` and no build step, because opencode loads the TypeScript source directly and provides `solid-js`, `@opentui/*` and `@opencode/plugin` itself.
 
-The person's terminal should support truecolor (Ghostty, iTerm2, WezTerm, kitty and similar); without it the pixels look blocky.
+The person's terminal should support truecolor (Ghostty, iTerm2, WezTerm, kitty and similar); without it the colors are off.
+
+The show draws its finest pixels with octant characters (Unicode 16). Ghostty draws them itself, so the plugin uses them there by default. Elsewhere it uses half blocks (pixels twice as large) unless `pixels: "fine"` is set. To check whether a terminal draws octants, run this in it; five small block shapes mean yes, boxes or question marks mean no:
+
+```bash
+printf '\U0001CD00\U0001CD01\U0001CD0B\U0001CD5F\U0001CDE5\n'
+```
 
 ## 2. Tell the person two things before installing
 
 These are defaults they may want to change, so mention them up front:
 
-- **A model writes show content in the background.** By default it uses the current session's own model (`session.generate`). Nothing is added to the session's history, but each request sends the session's context along and costs tokens on that model. A request happens at most once every 40 seconds while a turn runs, and less often once enough content is kept. They can pick a small model instead (`model: "provider/model-id"`) or turn it off (`model: false`).
+- **A model writes the show's skits in the background.** By default it uses the current session's own model (`session.generate`). Nothing is added to the session's history, but each request sends the session's context along and costs tokens on that model. A request happens at most once every 40 seconds while a turn runs, and less often once enough content is kept. They can pick a small model instead (`model: "provider/model-id"`) or turn it off (`model: false`).
 - **On macOS it listens to system sound for a random seed.** It reads band levels only; nothing is recorded, written or sent. The first time, it compiles a small helper with `swiftc`, and macOS asks once whether the terminal may record system audio. Without permission, without `swiftc`, on other systems, or with nothing playing, it uses a crypto random seed instead. `sound: false` turns this off.
 
 ## 3. Pick an install method
@@ -82,6 +88,7 @@ All options are optional; leave out any the person did not ask about.
 | `celebrate` | `true` / `false`: the finale after a turn | `true` |
 | `footerButton` | `true` / `false`: the **Spinner** toggle in the footer | `true` |
 | `reducedMotion` | `true` / `false`: still frames only | `false` |
+| `pixels` | `auto`, `fine` (octants, 2 × 4 pixels a cell), `coarse` (half blocks, 1 × 2) | `auto` (fine in Ghostty, coarse elsewhere) |
 
 ### Choosing `model`
 
@@ -93,7 +100,7 @@ All options are optional; leave out any the person did not ask about.
   ```
 
   Pick the smallest, fastest one (a "haiku", "mini", "flash" or "lite" model, for example). The plugin asks it with its lightest reasoning variant (`none`, `off`, `minimal` or `low`, whichever the model has), so thinking stays short.
-- **Turn it off** with `false` if they want no model calls at all. The show still runs, with its own random content.
+- **Turn it off** with `false` if they want no model calls at all. The show still runs its default bench scene.
 
 ### Recipes
 
@@ -120,7 +127,7 @@ Only the pet, no show above the prompt:
 Tell the person to restart opencode (quit every running TUI, then start it again). Then check, in the TUI:
 
 1. The prompt footer shows a **Spinner** label (unless `footerButton: false`).
-2. `/spinner status` opens a dialog. It shows the pet's level, the model (`Muse: session · kept: ...`, or `Muse: off`), and where the seed comes from.
+2. `/spinner status` opens a dialog. It shows the pet's level, the model (`Muse: session · kept: N skits`, or `Muse: off`), and where the seed comes from.
 3. Sending any prompt shows the show and the pet above the input box while the agent works.
 
 `/spinner` with no argument may need Enter twice: once to accept the completion, once to run it.
@@ -138,12 +145,14 @@ grep -iE "plugin operation failed|failed to load plugin" ~/.local/share/opencode
 | Nothing above the prompt | The show only plays while a turn runs (and 3 s after, for the finale); the pet is always there. The footer's **Spinner** may be off: click it. Under 60 columns or 20 rows only a one-line pet shows. |
 | Options have no effect | The plugin is also in a `plugins/` folder (remove that copy), or the entry is in `opencode.json` instead of `cli.json`, or the path is not absolute. `visible` is overridden once the footer toggle has been clicked. |
 | `/spinner status` shows a model error | `Model unavailable` means a wrong id: check it against `opencode models`. Other provider errors are shown as the provider sent them. |
-| The model writes nothing for a long time | Free models can take from 40 s to several minutes per batch, and once enough content is kept the plugin asks only on about a third of its chances. The show plays what is kept meanwhile. |
+| The model writes nothing for a long time | Free models can take from 40 s to several minutes per batch, and once 3 skits are kept for a kind of work the plugin asks only on about a third of its chances. The show plays what is kept meanwhile, and the bench when nothing is. |
 | The seed never comes from sound | With nothing playing it is random by design. Otherwise it needs macOS 14.2+, `swiftc` (`xcode-select --install`) and System Audio Recording permission for the terminal (System Settings, Privacy & Security). The helper lives at `~/.cache/opencode-spinner/audio-tap`; delete it to force a rebuild. |
-| Blocky or wrong colors | The terminal lacks truecolor. |
+| Wrong colors | The terminal lacks truecolor. |
+| Boxes or `?` in the show | `pixels: "fine"` in a terminal without octants: set `coarse` or remove the option. |
+| Pixels look large | The show is in half blocks. If the terminal draws octants (see step 1), set `pixels: "fine"`. |
 
 ## 7. Update or uninstall
 
 Update: `git -C <clone folder> pull`, then restart opencode.
 
-Uninstall: delete the clone folder, and the entry in `cli.json` if there is one. The plugin's stored state (the pet's level, the content the model wrote) lives in opencode's state folder, in files named `plugin.opencode-spinner.*.json` under `~/.local/state/opencode/latest/tui/`; delete those too for a clean removal. The sound helper is in `~/.cache/opencode-spinner/`.
+Uninstall: delete the clone folder, and the entry in `cli.json` if there is one. The plugin's stored state (the pet's level, the skits the model wrote) lives in opencode's state folder, in files named `plugin.opencode-spinner.*.json` under `~/.local/state/opencode/latest/tui/`; delete those too for a clean removal. The sound helper is in `~/.cache/opencode-spinner/`.

@@ -1,4 +1,4 @@
-// The workbench (one of the show's two places, show.ts): Claude's mascot
+// The workbench, the show's default scene (show.ts): Claude's mascot
 // wanders in (walking, on a skateboard, or carrying a parcel), stops somewhere
 // along the floor and gets to work. What he does
 // there is a vignette drawn at random from a pool that fits the turn: the tool
@@ -8,23 +8,59 @@
 // Ideas from fan Clawd animations: zhanbodev/clawd-spinner (a laptop, a page,
 // a magnifier per tool) and crashchen/cc-gifs (a scene per spinner verb:
 // Brewing, Tinkering, Cultivating, Catapulting…). The art here is our own.
-import { canvas, cells, draw, frame, mod, noise, plot, put } from './cells'
+import { canvas, cells, draw, drawFine, frame, mod, noise, plot, put } from './cells'
 import type { Canvas, Grid } from './cells'
-import type { Muse, MuseVignette } from './muse'
+import type { MuseLook } from './muse'
 import { SCENE_ROWS, glyphStars, ground } from './scenes'
 import type { Act } from './themes'
 
 const CLAUDE = '#d77757'
-const CLAWD = {
+export const CLAWD = {
   stand: ['..LLOOOOOOOO..', '..OOEOOOOEOO..', '..OOEOOOOEOO..', 'OOOOOOOOOOOOOO', '..OOOOOOOOOO..', '..DDDDDDDDDD..', '...D.D..D.D...'],
   step: ['..LLOOOOOOOO..', '..OOEOOOOEOO..', '..OOEOOOOEOO..', 'OOOOOOOOOOOOOO', '..OOOOOOOOOO..', '..DDDDDDDDDD..', '..D.D....D.D..'],
   blink: ['..LLOOOOOOOO..', '..OOOOOOOOOO..', '..OOEOOOOEOO..', 'OOOOOOOOOOOOOO', '..OOOOOOOOOO..', '..DDDDDDDDDD..', '...D.D..D.D...'],
   work: ['..LLOOOOOOOO..', '..OOEOOOOEOO..', '..OOEOOOOEOO..', '.OOOOOOOOOOOOO', 'O.OOOOOOOOOO.O', '..DDDDDDDDDD..', '...D.D..D.D...'],
   /** Arms up: a reach, a throw, a cheer. */
   up: ['O.LLOOOOOOOO.O', 'O.OOEOOOOEOO.O', '.OOOEOOOOEOOO.', '..OOOOOOOOOO..', '..OOOOOOOOOO..', '..DDDDDDDDDD..', '...D.D..D.D...'],
+  /** One arm up: a wave. */
+  wave: ['..LLOOOOOOOO.O', '..OOEOOOOEOO.O', '..OOEOOOOEOOO.', 'OOOOOOOOOOOO..', '..OOOOOOOOOO..', '..DDDDDDDDDD..', '...D.D..D.D...'],
 }
-const CLAWD_W = 14
+export const CLAWD_W = 14
 const CLAWD_COLORS = { O: CLAUDE, L: '#eb9b80', D: '#b05d42', E: '#2b1d18' }
+/** His fine pixels' colors: the body's, a rim of light along the top, a shade down the right. */
+const FINE_COLORS: Record<string, string> = { ...CLAWD_COLORS, R: '#f0a88c', S: '#b8603f' }
+
+const fineArt = new Map<readonly string[], string[]>()
+/**
+ * A frame at twice the detail (fine pixels): each pixel 2 × 2, the corners
+ * that face up rounded off, a rim of light on top and a shade on the right.
+ */
+function fineOf(art: readonly string[]): string[] {
+  const kept = fineArt.get(art)
+  if (kept) return kept
+  const grid = art.flatMap(line => {
+    const row = [...line].flatMap(ch => [ch, ch])
+    return [row, [...row]]
+  })
+  const at = (i: number, j: number) => grid[j]?.[i] ?? '.'
+  const out = grid.map((row, j) =>
+    row.map((ch, i) => {
+      if (ch === '.' || ch === 'E') return ch
+      const up = at(i, j - 1) === '.'
+      // Only wide parts (the head, not an arm or a foot) get round corners.
+      let run = 1
+      for (let k = i - 1; at(k, j) !== '.'; k--) run++
+      for (let k = i + 1; at(k, j) !== '.'; k++) run++
+      if (up && run >= 8 && (at(i - 1, j) === '.' || at(i + 1, j) === '.')) return '.'
+      if (ch === 'D') return ch
+      if (at(i + 1, j) === '.') return 'S'
+      return up ? (ch === 'L' ? 'L' : 'R') : ch
+    }),
+  )
+  const lines = out.map(r => r.join(''))
+  fineArt.set(art, lines)
+  return lines
+}
 const CODE = ['#7aa2f7', '#9ece6a', '#e0af68', '#bb9af7', '#7dcfff']
 const SPIN = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢']
 const WOOD = '#6b4f43'
@@ -404,6 +440,69 @@ export function poolOf(act: Act, tool?: string): readonly Vignette[] {
   return [coffee, ponder]
 }
 
+// ---- his looks ------------------------------------------------------------------
+
+/** Where his eyes are in his art, and the colors they are drawn over. */
+const EYE_X = [4, 9]
+const PINK = '#ff6b9d'
+const SHADES = '#1a1b26'
+
+/** Clawd in `art`, dressed in `look`: a shimmer, the eyes, a hat on his head, a thing in his left hand. */
+export function drawClawd(cv: Canvas, x: number, y: number, art: readonly string[], look: MuseLook | null, t: number): void {
+  if (look?.shiny) {
+    // A holographic band sweeping across him.
+    art.forEach((line, j) => {
+      for (let i = 0; i < line.length; i++) {
+        const color = CLAWD_COLORS[line[i] as keyof typeof CLAWD_COLORS]
+        if (color) plot(cv, x + i, y + j, line[i] !== 'E' && mod(i - j - t, 12) < 2 ? '#ffe6d9' : color)
+      }
+    })
+  } else drawFine(cv, x, y, fineOf(art), FINE_COLORS)
+  if (!look) return
+  const eye = (dx: number, dy: number, color: string) => plot(cv, x + dx, y + dy, color)
+  const clear = () => EYE_X.forEach(cx => [1, 2].forEach(dy => eye(cx, dy, CLAWD_COLORS.O)))
+  const dark = CLAWD_COLORS.E
+  switch (look.eyes) {
+    case 'happy':
+      clear()
+      EYE_X.forEach(cx => (eye(cx, 1, dark), eye(cx - 1, 2, dark), eye(cx + 1, 2, dark)))
+      break
+    case 'closed':
+      clear()
+      EYE_X.forEach(cx => (eye(cx - 1, 2, dark), eye(cx, 2, dark)))
+      break
+    case 'dizzy': {
+      clear()
+      const [dx, dy] = ([[0, 0], [1, 0], [1, 1], [0, 1]] as const)[mod(Math.floor(t / 2), 4)]!
+      EYE_X.forEach(cx => eye(cx + dx - 1, 1 + dy, dark))
+      break
+    }
+    case 'hearts':
+      clear()
+      EYE_X.forEach(cx => (eye(cx - 1, 1, PINK), eye(cx + 1, 1, PINK), eye(cx, 2, PINK)))
+      break
+    case 'shades':
+      for (let dx = 3; dx <= 10; dx++) eye(dx, 1, SHADES)
+      EYE_X.forEach(cx => (eye(cx - 1, 2, SHADES), eye(cx, 2, SHADES), eye(cx + 1, 2, SHADES), eye(cx - 1, 1, '#a9b1d6')))
+      break
+    case 'stars':
+      clear()
+      EYE_X.forEach(cx => {
+        eye(cx, 1, '#ffd166')
+        eye(cx, 2, '#ffd166')
+        if (mod(t, 8) < 4) eye(cx + 1, 1, '#fff3c4')
+      })
+      break
+    case 'normal':
+      break
+  }
+  const hatW = Math.max(0, ...look.hat.map(r => r.length))
+  // Hats and held things are fine art (muse.ts): half a pixel per character.
+  if (look.hat.length) drawFine(cv, x + (CLAWD_W * 2 - hatW) / 4, y - look.hat.length / 2, look.hat, look.colors)
+  const heldW = Math.max(0, ...look.held.map(r => r.length))
+  if (look.held.length) drawFine(cv, x - heldW / 2, y + 5 - look.held.length / 2, look.held, look.colors)
+}
+
 // ---- the walk -----------------------------------------------------------------
 
 type Walk = 'walk' | 'skate' | 'carry'
@@ -454,55 +553,30 @@ export function benchSpan(w: number, salt: number, isFirst: boolean): { length: 
   return isFirst ? { length: lapLength(w) - inLen, start: 0 } : { length: lapLength(w), start: -inLen }
 }
 
-// ---- the muse's vignettes ----------------------------------------------------
-
-const museCache = new WeakMap<MuseVignette, Vignette>()
-
-/** A scene the muse wrote: its prop on the bench, two frames taking turns, its caption above. */
-export function museVignette(v: MuseVignette): Vignette {
-  let made = museCache.get(v)
-  if (!made) {
-    made = {
-      name: `muse:${v.caption}`,
-      pose: v.pose,
-      px(cv, b, _e, t) {
-        const art = frame(v.frames, Math.floor(t / 4))
-        draw(cv, b, 7 - art.length, art, v.colors)
-      },
-      glyph(g, b) {
-        put(g, Math.max(0, Math.min(b, g[0]!.length - [...v.caption].length)), 0, v.caption, { c: '#e9b49a' })
-      },
-    }
-    museCache.set(v, made)
-  }
-  return made
-}
-
 /** The vignette Clawd plays at tick `t` and how far into it he is, or null while he walks. */
-export function vignetteAt(t: number, w: number, act: Act, tool?: string, muse?: Muse, salt = 0): { vignette: Vignette; e: number } | null {
+export function vignetteAt(t: number, w: number, act: Act, tool?: string, salt = 0): { vignette: Vignette; e: number } | null {
   const { stopped, lap } = placeOf(t, w, salt)
   if (stopped === null) return null
   const segment = Math.floor(stopped / SEGMENT)
   const e = stopped - segment * SEGMENT
-  // The muse's scenes take most segments while there are some (not a waiting ask: that keeps its sign).
-  const own = muse?.vignettes ?? []
-  if (own.length > 0 && act !== 'ask' && noise(lap * 17 + segment * 3 + 1) < 0.65) {
-    return { vignette: museVignette(own[Math.floor(noise(lap * 19 + segment * 7) * own.length)]!), e }
-  }
   const pool = poolOf(act, tool)
   return { vignette: pool[Math.floor(noise(lap * 13 + segment * 5 + pool.length) * pool.length)]!, e }
 }
 
-/** The workbench: Clawd walks in, works through vignettes, walks out. `SCENE_ROWS` rows. */
-export function benchScene(t: number, w: number, act: Act, tool?: string, muse?: Muse, salt = 0): Grid {
-  const cv = canvas(w, SCENE_ROWS)
+/**
+ * The workbench: Clawd walks in, works through vignettes, walks out. `rows`
+ * rows (at least SCENE_ROWS): the bench at the bottom, sky above.
+ */
+export function benchScene(t: number, w: number, act: Act, tool?: string, salt = 0, rows = SCENE_ROWS): Grid {
+  // Everything below is drawn as for SCENE_ROWS; the canvas shifts it down.
+  const cv = canvas(w, rows, (rows - SCENE_ROWS) * 2)
   // A plank floor scrolling under his feet.
   ground(cv, t, 7, 0.5, [WOOD, '#5a4238', WOOD, '#7a5a4c', '#5a4238'])
   const { x, stopped, walk } = placeOf(t, w, salt)
   const bench = x + CLAWD_W + 1
   const blink = mod(t, 30) < 2
 
-  const playing = stopped !== null ? vignetteAt(t, w, act, tool, muse, salt) : null
+  const playing = stopped !== null ? vignetteAt(t, w, act, tool, salt) : null
   const vignette = playing?.vignette ?? null
   const e = playing?.e ?? 0
   vignette?.px?.(cv, bench, e, t, x)
@@ -525,19 +599,21 @@ export function benchScene(t: number, w: number, act: Act, tool?: string, muse?:
     }
   } else if (vignette) {
     const beat = mod(t, 4) < 2
-    if (vignette.pose === 'work') art = beat ? CLAWD.work : CLAWD.stand
-    else if (vignette.pose === 'up') art = beat ? CLAWD.up : CLAWD.work
-    else if (vignette.pose === 'dance') {
+    const pose = vignette.pose
+    if (pose === 'work') art = beat ? CLAWD.work : CLAWD.stand
+    else if (pose === 'up') art = beat ? CLAWD.up : CLAWD.work
+    else if (pose === 'dance') {
       art = beat ? CLAWD.up : CLAWD.stand
       y = mod(t, 6) < 3 ? 0 : 1
     }
     if (blink && art === CLAWD.stand) art = CLAWD.blink
   }
-  draw(cv, x, y, art, CLAWD_COLORS)
+  drawClawd(cv, x, y, art, null, t)
 
   const g = cells(cv)
+  const bottom = g.slice(rows - SCENE_ROWS)
   glyphStars(g, t, Math.floor(w / 4), 0.05, ['·', '✻'], ['#8a6a5c', '#a97c68', '#6b5248'], 3)
-  if (vignette) vignette.glyph?.(g, bench, e, t, x)
-  else if (walk === 'skate') mark(g, x - 2, 2, '≡', { c: '#565f89', d: true })
+  if (vignette) vignette.glyph?.(bottom, bench, e, t, x)
+  else if (walk === 'skate') mark(bottom, x - 2, 2, '≡', { c: '#565f89', d: true })
   return g
 }

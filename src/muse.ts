@@ -1,11 +1,12 @@
-// The muse: a model asked, while the agent works, for fresh content the show
-// then draws. For the skatepark, tricks (real ones and ones made up about the
-// work at hand: "git push grind"), each with how the board turns. For the
-// workbench, little scenes: a pixel-art prop in two frames and a caption.
-// The show stays drawn here, frame by frame; the model only writes the
-// content, as JSON, checked strictly. Anything off is dropped. A seed (from the
-// sound playing, or crypto) decides when to ask and goes into the prompt;
-// meanwhile, and without a model, the show plays what is kept and its own.
+// The muse: a model asked, while the agent works, for skits, little silent
+// plays starring Clawd (stage.ts acts them out). A skit belongs to what the
+// agent is doing (thinking, searching, editing, a shell command, subagents, the
+// web, writing its answer) and brings its own place, a sticker-style look for
+// Clawd, props, and beats: where he goes, what he does to a prop, what effect
+// goes off, what he says. The model only writes the script, as JSON, read here
+// strictly: anything off is dropped. A seed (from the sound playing, or crypto)
+// decides when to ask and goes into the prompt; meanwhile, and without a model,
+// the show plays what is kept and its own default scene.
 import type { Lang } from './lang'
 import type { Act } from './themes'
 
@@ -33,40 +34,121 @@ export function lightestVariant(ids: readonly string[]): string | undefined {
   return LIGHT_VARIANTS.find(v => ids.includes(v))
 }
 
-// ---- what it writes -----------------------------------------------------------
+// ---- what the agent is doing ---------------------------------------------------
 
-export const BOARDS = ['flat', 'grip', 'under', 'graphic', 'end', 'tail', 'nose'] as const
-export type BoardFrame = (typeof BOARDS)[number]
-export const TRICK_KINDS = ['flip', 'grab', 'grind', 'manual'] as const
-export type TrickKind = (typeof TRICK_KINDS)[number]
+/** What a skit is about: the kinds of work the agent does. */
+export const KINDS = ['think', 'search', 'edit', 'shell', 'agent', 'web', 'say', 'other'] as const
+export type Kind = (typeof KINDS)[number]
 
-export type MuseTrick = { name: string; kind: TrickKind; frames: BoardFrame[]; points: number }
+/** A tool label (`grep: TODO`, `shell: npm test`) as the kind of work it is. */
+export function toolKind(tool: string | undefined): Kind {
+  const name = (tool ?? '').split(':')[0]!.trim().toLowerCase()
+  if (['read', 'grep', 'glob', 'list', 'ls', 'find'].includes(name)) return 'search'
+  if (['websearch', 'webfetch', 'fetch'].includes(name)) return 'web'
+  if (['edit', 'write', 'patch', 'multiedit', 'apply_patch'].includes(name)) return 'edit'
+  if (['shell', 'bash', 'execute'].includes(name)) return 'shell'
+  if (name.startsWith('subagent') || name === 'task' || name === 'agent') return 'agent'
+  return 'other'
+}
 
-export const MUSE_POSES = ['work', 'up', 'stand', 'dance'] as const
-export type MusePose = (typeof MUSE_POSES)[number]
+/** The kind of work for a turn's act and its tool. An ask has none: it keeps the default scene's sign. */
+export function kindOf(act: Act, tool?: string): Kind | null {
+  if (act === 'ask') return null
+  if (act === 'tool') return toolKind(tool)
+  if (act === 'say') return 'say'
+  return 'think'
+}
 
-/** A prop drawn on Clawd's bench: frames of pixel rows (`.` empty, else a color key). */
-export type MuseVignette = { caption: string; pose: MusePose; frames: string[][]; colors: Record<string, string> }
+const KIND_WORDS: Record<Kind, string> = {
+  think: 'thinking the task over',
+  search: 'searching and reading files',
+  edit: 'editing code',
+  shell: 'running shell commands',
+  agent: 'sending subagents off to work in parallel',
+  web: 'looking things up on the web',
+  say: 'writing its answer',
+  other: 'using a tool',
+}
 
-/** What the scenes get: the content made so far, newest first. */
-export type Muse = { tricks: readonly MuseTrick[]; vignettes: readonly MuseVignette[] }
+// ---- the script --------------------------------------------------------------
 
-export const PROP_W = 12
-export const PROP_H = 5
-export const CAPTION_W = 20
-const NAME_W = 22
+/** What Clawd looks like in a skit, the way his stickers dress him. His body stays his own. */
+export const EYES = ['normal', 'happy', 'closed', 'dizzy', 'hearts', 'shades', 'stars'] as const
+export type MuseLook = {
+  eyes: (typeof EYES)[number]
+  hat: string[]
+  held: string[]
+  colors: Record<string, string>
+  shiny: boolean
+}
+/** Look and prop art is in fine pixels, half a show pixel each way: Clawd is 28 × 14 of them. */
+export const HAT_W = 28
+export const HAT_H = 8
+export const HELD_W = 12
+export const HELD_H = 10
+
+/** Where a skit plays: what stands far off, what hangs in the sky, the weather, the colors. */
+export const BACKDROPS = ['none', 'city', 'hills', 'mountains', 'forest', 'sea', 'desert', 'space', 'snow', 'room'] as const
+export const SKIES = ['none', 'moon', 'sun', 'planet'] as const
+export const WEATHERS = ['clear', 'stars', 'rain', 'snow', 'leaves', 'fireflies', 'bubbles', 'sakura'] as const
+export type MusePlace = {
+  backdrop: (typeof BACKDROPS)[number]
+  sky: (typeof SKIES)[number]
+  weather: (typeof WEATHERS)[number]
+  colors: { far: string; near: string; ground: string; accent: string }
+}
+
+/** How a prop moves on its own. */
+export const MOTIONS = ['still', 'bob', 'float', 'fall', 'spin', 'blink', 'shake', 'orbit', 'grow'] as const
+export type SkitProp = {
+  id: string
+  /** One to three frames of pixel rows; with more than one they take turns. */
+  frames: string[][]
+  colors: Record<string, string>
+  /** Where it stands, 0 (left) to 1 (right). */
+  x: number
+  motion: (typeof MOTIONS)[number]
+}
+export const PROP_W = 24
+export const PROP_H = 12
+
+/** What Clawd does in a beat; `carry`, `throw` and `push` act on the beat's prop. */
+export const ACTIONS = ['walk', 'stand', 'work', 'jump', 'wave', 'cheer', 'dance', 'sit', 'sleep', 'carry', 'throw', 'push', 'look'] as const
+export const EFFECTS = ['none', 'sparks', 'hearts', 'notes', 'zzz', 'steam', 'confetti', 'stars', 'bubbles', 'lightning', 'smoke', 'rain', 'question', 'exclaim'] as const
+export type SkitBeat = {
+  do: (typeof ACTIONS)[number]
+  /** Where he goes (walk, carry, push) or where a thrown prop lands, 0 to 1. */
+  to: number | null
+  prop: string | null
+  effect: (typeof EFFECTS)[number]
+  say: string
+  /** How long the beat lasts. */
+  secs: number
+}
+
+export type MuseSkit = {
+  kind: Kind
+  title: string
+  place: MusePlace | null
+  look: MuseLook | null
+  props: SkitProp[]
+  beats: SkitBeat[]
+}
+
+/** What the show gets: the skits made so far, newest first. */
+export type Muse = { skits: readonly MuseSkit[] }
+
+export const TITLE_W = 24
+export const SAY_W = 24
+export const MAX_PROPS = 4
+export const MAX_BEATS = 8
+export const MAX_SECS = 30
+
+// ---- the prompt -------------------------------------------------------------
 
 const LANG_NAMES: Record<Lang, string> = {
   en: 'English', 'zh-Hans': 'Simplified Chinese', 'zh-Hant': 'Traditional Chinese', ja: 'Japanese', ko: 'Korean',
   es: 'Spanish', fr: 'French', de: 'German', 'pt-BR': 'Brazilian Portuguese', ru: 'Russian',
-}
-
-/** What the agent is doing, in words for the prompt. */
-export function activityOf(act: Act, tool?: string): string {
-  if (act === 'tool' && tool) return `running a tool: ${tool}`
-  if (act === 'say') return 'writing its answer'
-  if (act === 'ask') return 'waiting for the user to approve something'
-  return 'thinking about the task'
 }
 
 /** Words the seed picks two of, to send each batch somewhere new. */
@@ -84,39 +166,38 @@ export function seedLine(seed: number): string {
 }
 
 const PREAMBLE =
-  'You write content for a tiny pixel-art animation shown in a terminal while a coding agent works. ' +
-  'Its star is Clawd, a small orange blocky mascot. This is a side job: ignore any earlier conversation ' +
-  'except as a theme, do not use tools, and reply with JSON only (no prose, no code fences). ' +
-  'Answer right away: this needs no long thinking.'
+  'You write skits for a tiny pixel-art theater shown in a terminal while a coding agent works. ' +
+  'Its star is Clawd, a small orange blocky mascot (28 pixels wide, 14 tall, two tall black eyes near the top, stubby arms out at the sides, four short legs). ' +
+  'This is a side job: ignore any earlier conversation except as a theme, do not use tools, and reply with JSON only ' +
+  '(no prose, no code fences). Answer right away: this needs no long thinking.'
 
-export function skatePrompt(activity: string, seed: number): string {
-  return [
-    PREAMBLE,
-    `Clawd is skateboarding through a skatepark. The coding agent is ${activity}.`,
-    seedLine(seed),
-    'Invent 6 skateboard tricks: one or two real ones, the rest made up, punny and themed on that work or on the project (a command, a file, a bug, a tool).',
-    'Reply exactly in this shape (the values are placeholders: write your own names, and mix the kinds):',
-    '{"tricks":[{"name":"<trick name>","kind":"flip","frames":["flat","grip","under","graphic","flat"],"points":800},{"name":"<trick name>","kind":"grind","frames":["tail"],"points":600}]}',
-    `Rules: name at most ${NAME_W} characters, plain letters, digits, spaces and "-". kind is one of flip, grab, grind, manual. points 100 to 2000.`,
-    'For a flip, frames are 3 to 9 board positions from: flat, grip (on its side, grip tape showing), under (upside down), graphic (other side), end (turned end-on, a spin); start and end with flat.',
-    'For a grind or a manual, frames is one position from: flat, tail, nose, end. For a grab, frames is ["flat"].',
-  ].join('\n')
+/** The format example: a reply that sends it back as it is gets dropped. */
+const EXAMPLE = {
+  title: '<title>',
+  place: { backdrop: 'sea', sky: 'moon', weather: 'stars', colors: { far: '#24283b', near: '#414868', ground: '#565f89', accent: '#e0af68' } },
+  look: { eyes: 'happy', shiny: false, colors: { A: '#ffd166', B: '#e0af68' }, hat: ['..........AAAAAAAA', '........AAAAAAAAAAAA', '......BBBBBBBBBBBBBBBB'], held: [] },
+  props: [{ id: 'lamp', x: 0.7, motion: 'bob', colors: { B: '#7aa2f7', C: '#ffd166' }, frames: [['...CCCC...', '..CCCCCC..', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...'], ['....CC....', '...CCCC...', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...']] }],
+  beats: [
+    { do: 'walk', to: 0.5, secs: 2, effect: 'none', say: '' },
+    { do: 'look', prop: 'lamp', secs: 2, effect: 'question', say: '<a line>' },
+    { do: 'carry', prop: 'lamp', to: 0.2, secs: 3, effect: 'sparks', say: '' },
+  ],
 }
 
-/** The format example's frames: a reply that copies them is dropped. */
-const EXAMPLE_FRAMES = [['..AAAA..', '..A..A..', 'BBBBBBBB'], ['..AAAA..', '..AAAA..', 'BBBBBBBB']]
-
-export function clawdPrompt(activity: string, lang: Lang, seed: number): string {
+export function skitPrompt(kind: Kind, detail: string | undefined, lang: Lang, seed: number): string {
   return [
     PREAMBLE,
-    `Clawd stands at a little workbench. The coding agent is ${activity}.`,
+    `The coding agent is ${KIND_WORDS[kind]}${detail ? ` (now: ${detail})` : ''}. Write 2 skits that play while it does that: Clawd acting out, joking about or helping with that kind of work, in his own way.`,
     seedLine(seed),
-    'Invent 3 short, playful scenes of Clawd doing something that fits that work, and draw the prop on his bench as pixel art.',
-    'Reply exactly in this shape (an example of the format only: draw your own objects):',
-    `{"vignettes":[{"caption":"<caption>","pose":"work","colors":{"A":"#7aa2f7","B":"#e0af68"},"frames":${JSON.stringify(EXAMPLE_FRAMES)}}]}`,
-    `Rules: caption at most ${CAPTION_W} characters, in ${LANG_NAMES[lang]}. pose is one of work (hands busy), up (arms raised), stand, dance.`,
-    `colors: 1 to 4 single uppercase letters mapped to bright #rrggbb colors that show on a dark background.`,
-    `frames: exactly 2 frames that differ a little (the animation). Each frame is 2 to ${PROP_H} rows, each row at most ${PROP_W} characters, "." for empty and a color letter for a pixel. Draw a recognizable object, not noise.`,
+    'Be inventive and make the two skits very different: different places, props, actions, effects and gags. A skit lasts 6 to 20 seconds.',
+    'Reply exactly in this shape (the values only show the format: invent your own):',
+    JSON.stringify({ skits: [EXAMPLE] }),
+    `Rules. title and every say: at most ${TITLE_W} characters, in ${LANG_NAMES[lang]}; say may be "".`,
+    `place: backdrop one of ${BACKDROPS.join(', ')}; sky one of ${SKIES.join(', ')}; weather one of ${WEATHERS.join(', ')}; colors are #rrggbb on a dark terminal (far dim, near brighter, ground the floor, accent bright). place may be null.`,
+    `look (like his stickers: coffee, headphones, a wave, a wand, a light bulb, dizzy, a heart...): eyes one of ${EYES.join(', ')}; shiny true for a holographic shimmer (rarely); hat 0 to ${HAT_H} rows of up to ${HAT_W} characters on his head; held 0 to ${HELD_H} rows of up to ${HELD_W} characters in his hand. look may be null.`,
+    `props: 0 to ${MAX_PROPS}, each with a short lowercase id, x from 0 (left) to 1 (right), motion one of ${MOTIONS.join(', ')}, and 1 to 3 frames of up to ${PROP_H} rows of up to ${PROP_W} characters. Draw recognizable objects.`,
+    'Pixel rows: "." is empty, a color letter is a pixel; colors map 1 to 4 single uppercase letters to bright #rrggbb. Pixels are small (Clawd is 28 × 14 of them), so draw with detail: outlines, highlights, recognizable shapes.',
+    `beats: 2 to ${MAX_BEATS}, played in order. do is one of ${ACTIONS.join(', ')}. to (0 to 1) is where he walks, carries or pushes a prop to, or where a thrown prop lands. prop names the prop he acts on (needed for carry, throw, push; optional for look and work). effect one of ${EFFECTS.join(', ')}. secs 1 to 6.`,
   ].join('\n')
 }
 
@@ -143,29 +224,8 @@ function line(v: unknown, max: number): string | null {
   return text ? [...text].slice(0, max).join('') : null
 }
 
-export function parseTricks(text: string): MuseTrick[] {
-  const data = jsonOf(text)
-  const list = isRecord(data) && Array.isArray(data.tricks) ? data.tricks : []
-  const out: MuseTrick[] = []
-  for (const item of list.slice(0, 12)) {
-    if (!isRecord(item)) continue
-    const name = line(item.name, NAME_W)?.replace(/[^\p{L}\p{N} '\-!]/gu, '').trim()
-    const kind = TRICK_KINDS.find(k => k === item.kind)
-    // A placeholder sent back as it was is no name.
-    if (!name || !kind || /^trick name$/i.test(name)) continue
-    let frames = (Array.isArray(item.frames) ? item.frames : []).filter((f): f is BoardFrame => (BOARDS as readonly unknown[]).includes(f))
-    if (kind === 'flip') {
-      frames = frames.filter(f => f !== 'tail' && f !== 'nose').slice(0, 9)
-      if (frames[0] !== 'flat') frames.unshift('flat')
-      if (frames.at(-1) !== 'flat') frames.push('flat')
-      if (frames.length < 3) continue
-    } else if (kind === 'grab') frames = ['flat']
-    else frames = [frames.find(f => ['flat', 'tail', 'nose', 'end'].includes(f)) ?? 'flat']
-    const raw = typeof item.points === 'number' && Number.isFinite(item.points) ? item.points : 500
-    out.push({ name, kind, frames, points: Math.round(Math.min(2000, Math.max(100, raw)) / 50) * 50 })
-  }
-  return out
-}
+/** A placeholder sent back as it was: `<title>`, `<a line>`. */
+const isPlaceholder = (text: string) => /^<[^>]*>$/.test(text.trim())
 
 /** `#rrggbb` from `#rrggbb`, `#rgb` or `#rrggbbaa`; null for anything else. */
 function hexOf(value: unknown): string | null {
@@ -176,59 +236,141 @@ function hexOf(value: unknown): string | null {
   return null
 }
 
-export function parseVignettes(text: string): MuseVignette[] {
-  const data = jsonOf(text)
-  const list = isRecord(data) && Array.isArray(data.vignettes) ? data.vignettes : []
-  const out: MuseVignette[] = []
-  for (const item of list.slice(0, 6)) {
+/** Up to four single-letter color keys (uppercased) to #rrggbb. */
+function colorKeys(raw: unknown): Record<string, string> {
+  const colors: Record<string, string> = {}
+  if (!isRecord(raw)) return colors
+  for (const [key, value] of Object.entries(raw)) {
+    const hex = hexOf(value)
+    if (/^[A-Za-z]$/.test(key) && hex && Object.keys(colors).length < 4) colors[key.toUpperCase()] = hex
+  }
+  return colors
+}
+
+/** Pixel rows cut to `w` × `h`, unknown keys emptied; empty when nothing is drawn. Rows may come as one string split by newlines or `|`. */
+function pixelRows(raw: unknown, colors: Record<string, string>, w: number, h: number): string[] {
+  const lines = typeof raw === 'string' ? raw.split(/[\n|]/) : Array.isArray(raw) ? raw : []
+  const rows = lines
+    .filter((r): r is string => typeof r === 'string' && r.length > 0)
+    .slice(0, h)
+    .map(r => [...r.slice(0, w)].map(ch => (colors[ch.toUpperCase()] ? ch.toUpperCase() : '.')).join(''))
+  return rows.join('').replace(/\./g, '').length > 0 ? rows : []
+}
+
+const fraction = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null)
+const oneOf = <T extends string>(list: readonly T[], v: unknown, fallback: T): T => list.find(x => x === v) ?? fallback
+
+function readPlace(raw: unknown): MusePlace | null {
+  if (!isRecord(raw)) return null
+  const c = isRecord(raw.colors) ? raw.colors : {}
+  const [far, near, ground, accent] = [hexOf(c.far), hexOf(c.near), hexOf(c.ground), hexOf(c.accent)]
+  if (!far || !near || !ground || !accent) return null
+  return { backdrop: oneOf(BACKDROPS, raw.backdrop, 'none'), sky: oneOf(SKIES, raw.sky, 'none'), weather: oneOf(WEATHERS, raw.weather, 'clear'), colors: { far, near, ground, accent } }
+}
+
+function readLook(raw: unknown): MuseLook | null {
+  if (!isRecord(raw)) return null
+  const colors = colorKeys(raw.colors)
+  const look: MuseLook = {
+    eyes: oneOf(EYES, raw.eyes, 'normal'),
+    hat: pixelRows(raw.hat, colors, HAT_W, HAT_H),
+    held: pixelRows(raw.held, colors, HELD_W, HELD_H),
+    colors,
+    shiny: raw.shiny === true,
+  }
+  // A look that changes nothing is none.
+  return look.eyes === 'normal' && !look.shiny && look.hat.length === 0 && look.held.length === 0 ? null : look
+}
+
+function readProps(raw: unknown): SkitProp[] {
+  const out: SkitProp[] = []
+  for (const item of Array.isArray(raw) ? raw.slice(0, MAX_PROPS) : []) {
     if (!isRecord(item)) continue
-    const caption = line(item.caption, CAPTION_W)
-    const pose = MUSE_POSES.find(p => p === item.pose) ?? 'work'
-    const colors: Record<string, string> = {}
-    if (isRecord(item.colors)) {
-      for (const [key, value] of Object.entries(item.colors)) {
-        const hex = hexOf(value)
-        if (/^[A-Za-z]$/.test(key) && hex && Object.keys(colors).length < 4) colors[key.toUpperCase()] = hex
-      }
+    const id = typeof item.id === 'string' ? item.id.trim().toLowerCase().slice(0, 16) : ''
+    if (!id || out.some(p => p.id === id)) continue
+    const colors = colorKeys(item.colors)
+    const frames = (Array.isArray(item.frames) ? item.frames.slice(0, 3) : [])
+      .map(f => pixelRows(f, colors, PROP_W, PROP_H))
+      .filter(f => f.length > 0)
+    if (frames.length === 0) continue
+    out.push({ id, frames, colors, x: fraction(item.x) ?? 0.6, motion: oneOf(MOTIONS, item.motion, 'still') })
+  }
+  return out
+}
+
+const NEEDS_PROP = new Set(['carry', 'throw', 'push'])
+
+function readBeats(raw: unknown, props: readonly SkitProp[]): SkitBeat[] {
+  const out: SkitBeat[] = []
+  let total = 0
+  for (const item of Array.isArray(raw) ? raw.slice(0, MAX_BEATS) : []) {
+    if (!isRecord(item)) continue
+    const action = ACTIONS.find(a => a === item.do)
+    if (!action) continue
+    const named = typeof item.prop === 'string' ? item.prop.trim().toLowerCase() : null
+    const prop = named && props.some(p => p.id === named) ? named : null
+    // A beat that acts on a prop it doesn't have is the plain action instead.
+    const act = NEEDS_PROP.has(action) && !prop ? (action === 'throw' ? 'stand' : 'walk') : action
+    const said = line(item.say, SAY_W) ?? ''
+    const secs = typeof item.secs === 'number' && Number.isFinite(item.secs) ? Math.min(6, Math.max(1, item.secs)) : 2
+    if (total + secs > MAX_SECS) break
+    total += secs
+    out.push({ do: act, to: fraction(item.to), prop, effect: oneOf(EFFECTS, item.effect, 'none'), say: isPlaceholder(said) ? '' : said, secs })
+  }
+  return out
+}
+
+/** Whether two pieces of pixel art are mostly the same: three quarters of their pixels or more. */
+function alike(a: readonly string[], b: readonly string[]): boolean {
+  const h = Math.max(a.length, b.length)
+  const w = Math.max(...a.map(r => r.length), ...b.map(r => r.length))
+  let same = 0
+  let drawn = 0
+  for (let j = 0; j < h; j++) {
+    for (let i = 0; i < w; i++) {
+      const x = a[j]?.[i] ?? '.'
+      const y = b[j]?.[i] ?? '.'
+      if (x === '.' && y === '.') continue
+      drawn++
+      if (x === y) same++
     }
-    if (!caption || Object.keys(colors).length === 0) continue
-    const frames: string[][] = []
-    for (const raw of Array.isArray(item.frames) ? item.frames.slice(0, 4) : []) {
-      // A frame as rows, or as one string of rows split by newlines or `|`.
-      const lines = typeof raw === 'string' ? raw.split(/[\n|]/) : Array.isArray(raw) ? raw : null
-      if (!lines) continue
-      // Unknown keys become empty; rows are cut to the bench and the frame to its height.
-      const rows = lines
-        .filter((r): r is string => typeof r === 'string' && r.length > 0)
-        .slice(0, PROP_H)
-        .map(r => [...r.slice(0, PROP_W)].map(ch => (colors[ch.toUpperCase()] ? ch.toUpperCase() : '.')).join(''))
-      if (rows.length > 0 && rows.join('').replace(/\./g, '').length >= 3) frames.push(rows)
-    }
-    if (frames.length === 0 || /^caption$/i.test(caption.replace(/[<>]/g, ''))) continue
-    // The format example sent back: not a drawing.
-    if (frames.some(f => EXAMPLE_FRAMES.some(e => e.join('|') === f.join('|')))) continue
-    out.push({ caption, pose, frames, colors })
+  }
+  return drawn > 0 && same / drawn >= 0.75
+}
+
+/** The skits in a reply, each checked; `kind` is the work they were asked for. */
+export function parseSkits(text: string, kind: Kind): MuseSkit[] {
+  const data = jsonOf(text)
+  const list = isRecord(data) && Array.isArray(data.skits) ? data.skits : []
+  const out: MuseSkit[] = []
+  for (const item of list.slice(0, 4)) {
+    if (!isRecord(item)) continue
+    const title = line(item.title, TITLE_W)
+    if (!title || isPlaceholder(title)) continue
+    const props = readProps(item.props)
+    const beats = readBeats(item.beats, props)
+    if (beats.length < 2) continue
+    const skit: MuseSkit = { kind, title, place: readPlace(item.place), look: readLook(item.look), props, beats }
+    // Props copied from the format example (even with a few pixels changed) are not the model's own.
+    skit.props = skit.props.filter(p => !p.frames.some(f => EXAMPLE.props.some(e => e.frames.some(ef => alike(f, ef)))))
+    skit.beats = skit.beats.map(b => (b.prop && !skit.props.some(p => p.id === b.prop) ? { ...b, prop: null, do: NEEDS_PROP.has(b.do) ? 'walk' : b.do } : b))
+    out.push(skit)
   }
   return out
 }
 
 // ---- when to ask ------------------------------------------------------------------
 
-/** Below this many of a kind, the muse is always asked for more of it. */
-export const MUSE_LOW = 6
-/** Otherwise this share of chances (out of 100, by the seed) asks for new content. */
+/** Below this many skits for the work at hand, the muse is always asked for more. */
+export const MUSE_LOW = 3
+/** Otherwise this share of chances (out of 100, by the seed) asks for new ones. */
 export const MUSE_CHANCE = 35
 
-/**
- * Whether this chance asks the muse, and for what: the kind with fewer kept
- * (the seed breaks a tie). With both stocked, the seed decides whether to ask
- * at all; meanwhile the scene plays what is kept.
- */
-export function museNeed(muse: Muse, seed: number): 'tricks' | 'vignettes' | null {
-  const t = muse.tricks.length
-  const v = muse.vignettes.length
-  const kind = t === v ? (seed % 2 ? 'tricks' : 'vignettes') : t < v ? 'tricks' : 'vignettes'
-  const count = kind === 'tricks' ? t : v
-  if (count < MUSE_LOW) return kind
-  return (seed >>> 8) % 100 < MUSE_CHANCE ? kind : null
+/** The kept skits for a kind of work. */
+export const skitsFor = (muse: Muse | undefined, kind: Kind) => (muse?.skits ?? []).filter(s => s.kind === kind)
+
+/** Whether this chance asks the muse for skits for `kind`: always when few are kept, else as the seed says. */
+export function museNeed(muse: Muse, kind: Kind, seed: number): boolean {
+  if (skitsFor(muse, kind).length < MUSE_LOW) return true
+  return (seed >>> 8) % 100 < MUSE_CHANCE
 }

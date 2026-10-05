@@ -8,8 +8,8 @@ import { createStore, produce } from 'solid-js/store'
 import { SoundSeed, seedFrom } from './audio'
 import type { Config } from './config'
 import { lang, m } from './i18n'
-import { activityOf, clawdPrompt, lightestVariant, museNeed, parseModel, parseTricks, parseVignettes, skatePrompt } from './muse'
-import type { Muse, MuseTrick, MuseVignette } from './muse'
+import { kindOf, lightestVariant, museNeed, parseModel, parseSkits, skitPrompt } from './muse'
+import type { Muse, MuseSkit } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
 import type { News } from './pet'
 import { CLAWD_PET, PET_W, dockPetOf } from './pets'
@@ -78,7 +78,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   const calls = new Map<string, { sid: string; tool: string; command?: string }>()
   // What the muse wrote, newest first, and how it is doing.
   // Kept across restarts (and shared by every opencode open): a turn opens with the last ones.
-  const [muse, updateMuse] = context.storage.store<{ tricks: MuseTrick[]; vignettes: MuseVignette[] }>('muse', { initial: { tricks: [], vignettes: [] } })
+  const [muse, updateMuse] = context.storage.store<{ skits?: MuseSkit[] }>('muse', { initial: { skits: [] } })
   const [museState, setMuseState] = createSignal<MuseState>({ isBusy: false, error: null, via: null, at: 0, made: 0 })
   // Set once opencode's free tier turns a direct call down: from then on, ask through the session.
   let viaSession = false
@@ -288,6 +288,9 @@ export function createSpinner(context: Plugin.Context, config: Config) {
 
   // ---- the muse ----------------------------------------------------------
 
+  /** The skits kept (a store from before skits has none). */
+  const museOf = (): Muse => ({ skits: muse.skits ?? [] })
+
   const withTimeout = <T,>(p: Promise<T>, ms: number) =>
     Promise.race([p, new Promise<never>((_, reject) => later(ms, () => reject(new Error(`no reply in ${ms / 1000}s`))))])
 
@@ -337,22 +340,20 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     if (!isForced && Date.now() - state.at < (isEager ? 15_000 : MUSE_EVERY_MS)) return null
     const seed = freshSeed()
     setMuseState({ ...state, at: Date.now() })
-    const need = museNeed(muse, seed) ?? (isForced ? (muse.tricks.length <= muse.vignettes.length ? 'tricks' : 'vignettes') : null)
-    if (!need) return null
     const r = run(sid)
-    const activity = activityOf(r.act, busyLabel(Object.values(r.running)) || undefined)
-    const prompt = need === 'tricks' ? skatePrompt(activity, seed) : clawdPrompt(activity, lang(), seed)
+    const tool = busyLabel(Object.values(r.running)) || undefined
+    // Skits for what the agent does now; an ask has none of its own.
+    const kind = kindOf(r.act, tool) ?? 'think'
+    if (!isForced && !museNeed(museOf(), kind, seed)) return null
+    const prompt = skitPrompt(kind, tool, lang(), seed)
     setMuseState(s => ({ ...s, isBusy: true }))
     return withTimeout(askModel(prompt, sid), MUSE_TIMEOUT_MS)
       .then(({ text, via }) => {
-        const made = need === 'tricks' ? parseTricks(text) : parseVignettes(text)
+        const made = parseSkits(text, kind)
         if (made.length === 0) throw new Error(`nothing usable in the reply: ${text.slice(0, 80)}`)
-        void updateMuse(d => {
-          if (need === 'tricks') d.tricks = [...(made as MuseTrick[]), ...d.tricks].slice(0, MUSE_KEEP)
-          else d.vignettes = [...(made as MuseVignette[]), ...d.vignettes].slice(0, MUSE_KEEP)
-        })
+        void updateMuse(d => void (d.skits = [...made, ...(d.skits ?? [])].slice(0, MUSE_KEEP)))
         setMuseState(s => ({ ...s, isBusy: false, error: null, via, made: s.made + made.length }))
-        return made.map(item => ('name' in item ? item.name : item.caption))
+        return made.map(skit => skit.title)
       })
       .catch(err => {
         const error = String((err as Error)?.message ?? err).split('\n')[0]!.slice(0, 160)
@@ -438,7 +439,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     /** The label of the tool a session runs now (the latest, subagents counted). */
     toolOf: (sid: string) => busyLabel(Object.values(run(sid).running)),
     /** What the muse wrote, for the scene; kept across restarts. */
-    muse: (): Muse => muse,
+    muse: (): Muse => museOf(),
     museState,
     modelText,
     /** Asks the muse now, whatever the timing and the seed. */
