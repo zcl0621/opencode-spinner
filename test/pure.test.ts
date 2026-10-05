@@ -563,13 +563,17 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   expect(one[0]!.summary).toBe('Bloop lost the bug, then found it in the soup.')
   expect(one[0]!.beats.map(b => b.caption)).toEqual(['Meanwhile, in the kitchen', undefined, 'x'.repeat(CAPTION_W)])
   expect(one[1]!.summary).toBeUndefined()
+  // Episode numbers the model puts up front are dropped: the stage shows its own.
+  const numbered = parseSkits(JSON.stringify({ skits: [{ title: 'Ep4: The Folded Ladle', beats: [{ caption: 'Episode 1: Long-running cast', do: 'wave' }, { caption: 'Ep. 2', do: 'bow' }, { caption: '第3集：汤', do: 'bow' }] }] }), 'think')[0]!
+  expect(numbered.title).toBe('The Folded Ladle')
+  expect(numbered.beats.map(b => b.caption)).toEqual(['Long-running cast', undefined, '汤'])
 
   // The first skit of each reply is the next episode; the second stands alone.
   let kept = numberEpisodes(one, { skits: [] })
   expect(kept.map(k => k.episode)).toEqual([1, undefined])
   for (let i = 2; i <= 5; i++) {
     // Later episodes bring Bloop back without a look: he keeps his hat.
-    const next = numberEpisodes(parseSkits(reply(`Ep${i}`, 'BLOOP'), 'edit'), { skits: kept })
+    const next = numberEpisodes(parseSkits(reply(`Part ${i}`, 'BLOOP'), 'edit'), { skits: kept })
     expect(next[0]!.episode).toBe(i)
     expect(next[0]!.cast[1]!.look!.hat).toEqual(['AAAA'])
     kept = [...next, ...kept]
@@ -579,7 +583,7 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   expect(story.cast.map(a => a.name)).toEqual(['Clawd', 'BLOOP'])
   const prompt = skitPrompt('edit', undefined, 'en', 7, story)
   expect(prompt).toContain('episode 6 of an ongoing series')
-  expect(prompt).toContain('ep. 5 "Ep5": BLOOP lost the bug')
+  expect(prompt).toContain('ep. 5 "Part 5": BLOOP lost the bug')
   expect(prompt).toContain('BLOOP (#7aa2f7)')
   expect(prompt).toContain('Lately in the coding session: tests failed; a commit was made.')
   expect(prompt).toContain('a setup, then trouble or a twist')
@@ -606,7 +610,7 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
     for (const row of g) expect(widthOf(row)).toBe(w)
     if (w === 90) texts.push(g[0]!.map(c => c.ch).join(''))
   }
-  expect(texts[0]).toContain('Ep.5 Ep5')
+  expect(texts[0]).toContain('Ep.5 Part 5')
   expect(texts.slice(0, 20).join('\n')).toContain('Meanwhile, in the kitchen')
   expect(texts.slice(25, 40).join('\n')).not.toContain('Meanwhile')
 })

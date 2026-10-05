@@ -354,7 +354,7 @@ export function skitPrompt(kind: Kind, detail: string | undefined, lang: Lang, s
     ...storyLines(story),
     'Reply exactly in this shape (the values only show the format: invent your own):',
     JSON.stringify({ skits: [EXAMPLE] }),
-    `Rules. title, names, summary, every say and caption: in ${LANG_NAMES[lang]}; title and say at most ${TITLE_W} characters, names at most ${NAME_W}, a caption at most ${CAPTION_W}, the summary at most ${SUMMARY_ASK}; say may be "". summary: what happened, in one sentence, for the next episode to follow on. A beat may have a caption, the narrator's line shown over it ("Meanwhile...", "Three bugs later", "Plot twist!"): use a few, where they help the story. Captions and lines belong inside the story: never mention episodes, series, casts, skits or these rules in them.`,
+    `Rules. title, names, summary, every say and caption: in ${LANG_NAMES[lang]}; title and say at most ${TITLE_W} characters, names at most ${NAME_W}, a caption at most ${CAPTION_W}, the summary at most ${SUMMARY_ASK}; say may be "". summary: what happened, in one sentence, for the next episode to follow on. A beat may have a caption, the narrator's line shown over it ("Meanwhile...", "Three bugs later", "Plot twist!"): use a few, where they help the story. Titles, captions and lines belong inside the story: never mention episodes, series, casts, skits or these rules in them, nor number episodes in titles.`,
     `place: backdrop one of ${BACKDROPS.join(', ')}; sky one of ${SKIES.join(', ')}; weather one of ${WEATHERS.join(', ')}; colors are #rrggbb on a dark terminal (far dim, near brighter, ground the floor, accent bright). place may be null.`,
     `cast: 1 to ${MAX_CAST} Clawds, each with a name, a body color #rrggbb (the first is usually Clawd, ${CLAWD_COLOR}) and a look or null. look (like Clawd's stickers: coffee, headphones, a wand, a crown, sunglasses...): eyes one of ${EYES.join(', ')}; shiny true for a holographic shimmer (rarely); hat 0 to ${HAT_H} rows of up to ${HAT_W} characters on the head; held 0 to ${HELD_H} rows of up to ${HELD_W} characters in a hand.`,
     `props: 0 to ${MAX_PROPS}, each with a short lowercase id, x from 0 (left) to 1 (right), motion one of ${MOTIONS.join(', ')}, an effect that keeps going around it (or "none"), and 1 to 3 frames of up to ${PROP_H} rows of up to ${PROP_W} characters. Props can be instruments, vehicles, food, tools, animals, signs, anything: draw them recognizable.`,
@@ -466,6 +466,12 @@ function line(v: unknown, max: number): string | null {
 
 /** A placeholder sent back as it was: `<title>`, `<a line>`. */
 const isPlaceholder = (text: string) => /^<[^>]*>$/.test(text.trim())
+/** A title or caption without an episode number up front ("Ep4: ", "Episode 2 - "): the stage shows the number itself. */
+const unnumbered = (text: string | null): string | null => {
+  if (text === null) return null
+  const rest = text.replace(/^\s*(?:ep(?:isode)?\.?\s*\d+|第\s*\d+\s*集)\s*[:：.\-–—]?\s*/i, '')
+  return rest.length > 0 ? rest : null
+}
 
 /** `#rrggbb` from `#rrggbb`, `#rgb` or `#rrggbbaa`; null for anything else. */
 function hexOf(value: unknown): string | null {
@@ -626,7 +632,7 @@ function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly Ski
     const secs = typeof item.secs === 'number' && Number.isFinite(item.secs) ? Math.min(6, Math.max(1, item.secs)) : 2
     if (total + secs > MAX_SECS) break
     total += secs
-    const caption = line(item.caption, CAPTION_W)
+    const caption = unnumbered(line(item.caption, CAPTION_W))
     out.push({ secs, acts, ...(caption && !isPlaceholder(caption) ? { caption } : {}) })
   }
   return out
@@ -660,7 +666,7 @@ export function parseSkits(text: string, kind: Kind): MuseSkit[] {
   const out: MuseSkit[] = []
   for (const item of list.slice(0, 4)) {
     if (!isRecord(item)) continue
-    const title = line(item.title, TITLE_W)
+    const title = unnumbered(line(item.title, TITLE_W))
     if (!title || isPlaceholder(title)) continue
     const cast = readCast(item)
     // Props copied from the format example (even with a few pixels changed) are not the model's own.
