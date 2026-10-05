@@ -86,11 +86,11 @@ On first use the plugin compiles a small helper from `src/audio-tap.swift` into 
 
 The pet changes pose for thinking, running a tool, answering and waiting. Its bubble only says what opencode's own progress line doesn't: the tool running (`shell: npm test`, `edit: themes.ts`), or a permission request or question waiting for you (`❯ Waiting for your OK~`). Subagents running side by side are counted (`subagent ×3`). When the agent runs tests or commits, the pet says so for a few seconds (tests passed, tests failed, committed).
 
-Between turns it stays put: done, interrupted, error, and dozing after 5 quiet minutes. Every finished turn, passing test run and commit earns xp and levels (`Lv.4`). Click it, or type `/spinner pet`, to pat it (`♥12`, with floating hearts). Level and affection are kept across sessions, and every opencode you have open raises the same pet.
+Each turn it puts on a new outfit, picked by the turn's seed: a party hat, a crown, a beanie, a top hat, headphones, a flower, a chef's hat, a coffee or a wand, or about half the time a hat or held thing from one of the skits the model wrote. Between turns it stays put: done, interrupted, error, and dozing after 5 quiet minutes. Every finished turn, passing test run and commit earns xp and levels (`Lv.4`). Click it, or type `/spinner pet`, to pat it (`♥12`, with floating hearts). Level and affection are kept across sessions, and every opencode you have open raises the same pet.
 
 With the pet turned off (`companion: false`), Clawd stands in front of opencode's own progress bar instead (`▐▛█▜▌▭▭ ⬝⬝⬝■■ esc interrupt`).
 
-A finished turn gets confetti and the time taken (`▐▛█▜▌ ✻  Done · 12s`), an interrupted one a sad face, an error a glitchy flicker. Under 60 columns or 20 rows the show steps aside and the pet shrinks to one line. The **Spinner** label in the prompt footer turns all animations off and on.
+A finished turn gets confetti and the time taken (`▐▛█▜▌ ✻  Done · 12s`), an interrupted one a sad face, an error a glitchy flicker. Under 60 columns or 20 rows the show steps aside and the pet shrinks to one line. The pet is four rows tall: the top one holds its hat. The **Spinner** label in the prompt footer turns all animations off and on.
 
 ## Install
 

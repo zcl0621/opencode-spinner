@@ -12,7 +12,7 @@ import { kindOf, lightestVariant, museNeed, parseModel, parseSkits, skitPrompt }
 import type { Muse, MuseSkit } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
 import type { News } from './pet'
-import { CLAWD_PET, PET_W, dockPetOf } from './pets'
+import { CLAWD_PET, PET_W, dockPetOf, outfitFor } from './pets'
 import type { PetState } from './pets'
 import { startTap } from './tap'
 import type { TapStatus } from './tap'
@@ -377,7 +377,9 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     const patId = pat()
     // A waiting ask outranks news: it is the one the person must act on.
     const said = state === 'ask' ? null : r.news
-    const id = `${name}:${state}:${patId ?? ''}`
+    // A new outfit each turn, from the turn's seed.
+    const outfit = outfitFor(r.seed, museOf())
+    const id = `${name}:${state}:${patId ?? ''}:${outfit?.key ?? ''}`
     const view = {
       id,
       bubble: said ? m(`pet.${said.kind}`) : bubbleOf(state, busyLabel(Object.values(r.running))),
@@ -387,7 +389,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     let loop = loops.get(id)
     if (!loop) {
       if (loops.size > 40) loops.clear()
-      loop = dockPetOf(CLAWD_PET, state, view, patId !== null, config.isStill)
+      loop = dockPetOf(CLAWD_PET, state, view, patId !== null, config.isStill, outfit)
       loops.set(id, loop)
     }
     return { ...loop, ...view }

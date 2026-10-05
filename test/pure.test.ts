@@ -13,7 +13,7 @@ import { parseCommand } from '../src/command'
 import { pixelModeOf, readConfig } from '../src/config'
 import { parseLanguage, resolveLanguage } from '../src/lang'
 import { busyLabel, formatDuration, levelOf, newsOf, toolLabel } from '../src/pet'
-import { CLAWD_PET, PET_ROWS, PET_W, dockPetOf } from '../src/pets'
+import { CLAWD_PET, OUTFITS, PET_ROWS, PET_W, dockPetOf, outfitFor, petFrame } from '../src/pets'
 import { THEME, finaleScene, segments, textWidth } from '../src/themes'
 import type { Act } from '../src/themes'
 
@@ -178,6 +178,25 @@ test('the pet: every state loops in frames PET_W wide and PET_ROWS tall; still i
       for (const row of frame) expect(textWidth(row.map(s => s.text).join(''))).toBe(PET_W)
     }
     expect(dockPetOf(CLAWD_PET, state, view, false, true).order).toEqual([0])
+  }
+})
+
+test('the pet: the turn seed picks its outfit, built-in or from the skit looks', () => {
+  const keys = new Set<string>()
+  for (let seed = 0; seed < 4000; seed += 7) keys.add(outfitFor(seed).key)
+  expect(keys.size).toBe(OUTFITS.length)
+  expect(outfitFor(1234).key).toBe(outfitFor(1234).key)
+  const muse: Muse = { skits: SKITS() }
+  const fromSkits = new Set<string>()
+  for (let seed = 0; seed < 400; seed++) fromSkits.add(outfitFor(seed, muse).key)
+  expect([...fromSkits].some(k => k.startsWith('muse:'))).toBe(true)
+  // Every outfit, every state: the pet keeps its size.
+  for (const outfit of OUTFITS) {
+    for (const state of ['think', 'tool', 'say', 'ask', 'sleep', 'error', 'ready'] as const) {
+      const g = petFrame(CLAWD_PET, state, 3, 0, outfit)
+      expect(g).toHaveLength(PET_ROWS)
+      for (const row of g) expect(widthOf(row)).toBe(PET_W)
+    }
   }
 })
 

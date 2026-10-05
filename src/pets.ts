@@ -1,9 +1,12 @@
-// The companion: a pixel pet three rows tall (6 px in half blocks), drawn the
-// same wherever it stands (right-aligned above the prompt).
+// The companion: a pixel pet four rows tall (the top row for its hat), drawn
+// the same wherever it stands (right-aligned above the prompt). Each turn it
+// wears an outfit drawn at random: a built-in hat or held thing, or one from a
+// look the muse wrote for a skit.
 // Clawd's body and where his eyes sit; blinking, breathing, the expressions
 // and the props beside him are drawn from those.
-import { canvas, cells, draw, mod, noise, plot, segments } from './cells'
+import { canvas, cells, draw, drawFine, mod, noise, plot, segments } from './cells'
 import type { Canvas, Grid } from './cells'
+import type { Muse, MuseLook } from './muse'
 import type { DockPet } from './types'
 import type { Act, Mood } from './themes'
 
@@ -33,7 +36,9 @@ export type PetArt = {
 export const PROP_W = 4
 export const BODY_W = 12
 export const PET_W = PROP_W + BODY_W
-export const PET_ROWS = 3
+export const PET_ROWS = 4
+/** Pixels above the body for a hat: everything else is drawn this much lower. */
+const HEADROOM = 2
 /** Milliseconds per frame of the pet. */
 export const PET_MS = 140
 
@@ -48,8 +53,8 @@ export function loopOf(state: PetState): number {
 }
 
 /** The pet at tick `t` in `state`, `hearts` frames into a pat (0: none). */
-export function petFrame(art: PetArt, state: PetState, t: number, hearts = 0): Grid {
-  const cv = canvas(PET_W, PET_ROWS)
+export function petFrame(art: PetArt, state: PetState, t: number, hearts = 0, outfit: Outfit | null = null): Grid {
+  const cv = canvas(PET_W, PET_ROWS, HEADROOM)
   const isBusy = state === 'tool' || state === 'say' || state === 'think'
   // Breathing: up a pixel for part of each beat, quicker while it works; a hop when happy.
   const beat = isBusy ? 6 : 16
@@ -62,6 +67,7 @@ export function petFrame(art: PetArt, state: PetState, t: number, hearts = 0): G
   const colors = state === 'error' ? desaturate(art.colors) : art.colors
   draw(cv, PROP_W, y, body, colors)
   drawFace(cv, art, state, t, y)
+  if (outfit) wear(cv, outfit, y, state)
   drawProps(cv, art, state, t)
   if (hearts > 0) {
     const rise = Math.min(4, hearts >> 1)
@@ -69,6 +75,64 @@ export function petFrame(art: PetArt, state: PetState, t: number, hearts = 0): G
     if (hearts > 3) draw(cv, PROP_W + BODY_W - 3, Math.max(0, 2 - (rise >> 1)), HEART, { P: '#ff8fab' })
   }
   return cells(cv)
+}
+
+// ---- outfits ----------------------------------------------------------------------
+
+/** What the pet wears: a hat on its head and a thing in its hand, fine pixels (two characters a pixel). */
+export type Outfit = { key: string; hat: readonly string[]; held: readonly string[]; colors: Record<string, string> }
+
+/** The tallest hat that fits above its head, in fine pixels. */
+const PET_HAT_H = HEADROOM * 2 + 2
+
+const HATS: Record<string, { art: string[]; colors: Record<string, string> }> = {
+  party: { art: ['.......CC.......', '......AAAA......', '.....ABBAAA.....', '....AAAABBAA....', '...ABBAAAAABB...', '..AAAAABBAAAAA..'], colors: { A: '#ff6b9d', B: '#ffd166', C: '#ffffff' } },
+  crown: { art: ['.Y.....YY.....Y.', '.YY...YYYY...YY.', '.YYYYYYRRYYYYYY.', '.YYYYYYYYYYYYYY.'], colors: { Y: '#ffd166', R: '#f7768e' } },
+  beanie: { art: ['.......WW.......', '.....BBBBBB.....', '...BBBBBBBBBB...', '..BBBBBBBBBBBB..', '..SSSSSSSSSSSS..'], colors: { B: '#7aa2f7', S: '#c0caf5', W: '#ffffff' } },
+  tophat: { art: ['....KKKKKKKK....', '....KKKKKKKK....', '....KKKKKKKK....', '....RRRRRRRR....', '..KKKKKKKKKKKK..'], colors: { K: '#24283b', R: '#f7768e' } },
+  headphones: { art: ['.....GGGGGGGGGGGGGG.....', '...GG..............GG...', '..G..................G..', '.G....................G.', 'PPP..................PPP', 'PPP..................PPP'], colors: { G: '#9aa5ce', P: '#bb9af7' } },
+  flower: { art: ['......FFF.......', '.....FFYFF......', '......FFF.......', '.......G..GG....', '.......GGG......', '.......G........'], colors: { F: '#ff8fab', Y: '#ffd166', G: '#9ece6a' } },
+  chef: { art: ['....WWW.WWW.....', '...WWWWWWWWWW...', '...WWWWWWWWWW...', '....WWWWWWWW....', '....EEEEEEEE....', '....WWWWWWWW....'], colors: { W: '#f5f5f5', E: '#c0caf5' } },
+}
+const HELD: Record<string, { art: string[]; colors: Record<string, string> }> = {
+  // Their own color letters: an outfit may pair one with a hat.
+  coffee: { art: ['.V..V.', '..V..V', 'MMMMM.', 'MTTTMM', 'MMMMM.', '.MMM..'], colors: { M: '#f5f5f5', T: '#8b5a2b', V: '#a9b1d6' } },
+  wand: { art: ['...X..', '..XXX.', '...X..', '..N...', '.N....', 'N.....'], colors: { X: '#ffd166', N: '#8b5a2b' } },
+}
+/** Built-in outfits, one per hat and one per held thing; plain Clawd now and then too. */
+export const OUTFITS: readonly Outfit[] = [
+  ...Object.entries(HATS).map(([key, h]) => ({ key, hat: h.art, held: [], colors: h.colors })),
+  ...Object.entries(HELD).map(([key, h]) => ({ key, hat: [], held: h.art, colors: h.colors })),
+  { key: 'party+coffee', hat: HATS.party!.art, held: HELD.coffee!.art, colors: { ...HATS.party!.colors, ...HELD.coffee!.colors } },
+  { key: 'tophat+wand', hat: HATS.tophat!.art, held: HELD.wand!.art, colors: { ...HATS.tophat!.colors, ...HELD.wand!.colors } },
+  { key: 'plain', hat: [], held: [], colors: {} },
+]
+
+/** A look the muse wrote, as the pet wears it: its hat only if it fits above the head. */
+function outfitOf(look: MuseLook, key: string): Outfit | null {
+  const hat = look.hat.length <= PET_HAT_H ? look.hat : []
+  return hat.length || look.held.length ? { key, hat, held: look.held, colors: look.colors } : null
+}
+
+/** The outfit for a turn's seed: a built-in one, or about half the time one from the skits' looks. */
+export function outfitFor(seed: number, muse?: Muse): Outfit {
+  const looks = (muse?.skits ?? []).flatMap((s, i) => (s.look ? [outfitOf(s.look, `muse:${i}:${s.title}`)] : [])).filter((o): o is Outfit => o !== null)
+  const salt = seed % 9973
+  if (looks.length > 0 && noise(salt + 0.3) < 0.5) return looks[Math.floor(noise(salt * 7 + 0.1) * looks.length)]!
+  return OUTFITS[Math.floor(noise(salt * 3 + 0.7) * OUTFITS.length)]!
+}
+
+/** The outfit on the pet, its body's top at `y`: the hat centred on its head, the held thing at its left arm. */
+function wear(cv: Canvas, outfit: Outfit, y: number, state: PetState): void {
+  if (outfit.hat.length) {
+    const w = Math.max(...outfit.hat.map(r => r.length))
+    drawFine(cv, PROP_W + (BODY_W * 2 - w) / 4, Math.max(-HEADROOM, y - outfit.hat.length / 2), outfit.hat, outfit.colors)
+  }
+  // Put away while it sleeps or is upset.
+  if (outfit.held.length && state !== 'sleep' && state !== 'error' && state !== 'aborted') {
+    const w = Math.max(...outfit.held.map(r => r.length))
+    drawFine(cv, PROP_W - w / 2 + 0.5, y + 3 - outfit.held.length / 2, outfit.held, outfit.colors)
+  }
 }
 
 function drawFace(cv: Canvas, art: PetArt, state: PetState, t: number, y: number): void {
@@ -177,6 +241,7 @@ export function dockPetOf(
   view: Pick<DockPet, 'id' | 'bubble' | 'tone' | 'stats'>,
   isPatted = false,
   isStill = false,
+  outfit: Outfit | null = null,
 ): DockPet {
   const frames: DockPet['frames'] = []
   const seen = new Map<string, number>()
@@ -185,7 +250,7 @@ export function dockPetOf(
   const loop = isStill ? 1 : loopOf(state)
   for (let t = 0; t < loop; t++) {
     // A pat floats hearts over the first frames of the loop.
-    const rows = petFrame(art, state, t, isPatted && t < 16 ? t + 1 : 0).map(row => segments(row).map(plainSeg))
+    const rows = petFrame(art, state, t, isPatted && t < 16 ? t + 1 : 0, outfit).map(row => segments(row).map(plainSeg))
     const key = JSON.stringify(rows)
     let at = seen.get(key)
     if (at === undefined) {
