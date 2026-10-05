@@ -194,8 +194,8 @@ export type SkitAct = {
   effect: (typeof EFFECTS)[number]
   say: string
 }
-/** A beat: what each Clawd in it does at the same time, for `secs` seconds. The others look on. */
-export type SkitBeat = { secs: number; acts: SkitAct[] }
+/** A beat: what each Clawd in it does at the same time, for `secs` seconds. The others look on. A caption is the narrator's line over it. */
+export type SkitBeat = { secs: number; acts: SkitAct[]; caption?: string }
 
 export type MuseSkit = {
   kind: Kind
@@ -206,6 +206,10 @@ export type MuseSkit = {
   /** Moves the model made up for this skit (absent in skits kept from before). */
   moves?: SkitMove[]
   beats: SkitBeat[]
+  /** What happened, in a sentence, so the next episode can follow on. */
+  summary?: string
+  /** Its number in the series, when it is an episode (`numberEpisodes`). */
+  episode?: number
 }
 
 /** What the show gets: the skits made so far, newest first. */
@@ -219,6 +223,11 @@ export const MAX_PROPS = 4
 export const MAX_BEATS = 10
 export const MAX_ACTS = 3
 export const MAX_SECS = 36
+export const CAPTION_W = 28
+export const SUMMARY_W = 90
+/** Episodes the prompt recalls, and how long the session's news stays news. */
+export const RECALL = 3
+export const NEWS_FRESH_MS = 30 * 60_000
 
 /** A skit kept before casts and beats of several acts (one Clawd, a beat a deed) in today's shape. */
 export function upgradeSkit(skit: MuseSkit): MuseSkit {
@@ -274,6 +283,7 @@ const PREAMBLE =
 /** The format example: a reply that sends it back as it is gets dropped. */
 const EXAMPLE = {
   title: '<title>',
+  summary: '<what happened, in one sentence>',
   place: { backdrop: 'stage', sky: 'none', weather: 'clear', colors: { far: '#24283b', near: '#414868', ground: '#565f89', accent: '#e0af68' } },
   cast: [
     { name: 'Clawd', color: CLAWD_COLOR, look: { eyes: 'happy', shiny: false, colors: { A: '#ffd166', B: '#e0af68' }, hat: ['..........AAAAAAAA', '........AAAAAAAAAAAA', '......BBBBBBBBBBBBBBBB'], held: [] } },
@@ -282,21 +292,64 @@ const EXAMPLE = {
   props: [{ id: 'lamp', x: 0.7, motion: 'bob', effect: 'none', colors: { B: '#7aa2f7', C: '#ffd166' }, frames: [['...CCCC...', '..CCCCCC..', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...'], ['....CC....', '...CCCC...', 'BBBBBBBBBB', '.BBBBBBBB.', '...BBBB...']] }],
   moves: [{ name: '<move>', tempo: 3, effect: 'none', frames: [{ left: 'up', right: 'down', legs: 'step', lift: 1, dx: -1 }, { left: 'down', right: 'up', legs: 'stand', lift: 0, dx: 1, flip: true }] }],
   beats: [
-    { secs: 2, acts: [{ who: 'Clawd', do: 'walk', to: 0.3 }, { who: '<name>', do: 'wave', say: '<a line>' }] },
+    { secs: 2, caption: '<narrator>', acts: [{ who: 'Clawd', do: 'walk', to: 0.3 }, { who: '<name>', do: 'wave', say: '<a line>' }] },
     { secs: 3, acts: [{ who: 'Clawd', do: 'highfive', with: '<name>', effect: 'sparks' }, { who: '<name>', do: '<move>' }] },
     { secs: 3, acts: [{ who: '<name>', do: 'carry', prop: 'lamp', to: 0.9 }, { who: 'Clawd', do: 'chase', with: '<name>', say: '<a line>' }] },
   ],
 }
 
-export function skitPrompt(kind: Kind, detail: string | undefined, lang: Lang, seed: number): string {
+/** The series so far, for the prompt: the last episodes, oldest first, its regular cast, and the session's news. */
+export type Story = { previously: { episode: number; title: string; summary: string }[]; cast: SkitActor[]; news: string[] }
+
+/** The story so far from the kept skits (newest first) and what happened in the session lately. */
+export function storyOf(muse: Muse, news: readonly string[] = []): Story {
+  const episodes = muse.skits.filter(s => s.episode !== undefined && s.summary)
+  const previously = episodes.slice(0, RECALL).reverse().map(s => ({ episode: s.episode!, title: s.title, summary: s.summary! }))
+  return { previously, cast: episodes[0]?.cast ?? [], news: [...news] }
+}
+
+/** What the next episode is numbered: one past the newest kept. */
+export const nextEpisode = (muse: Muse) => Math.max(0, ...muse.skits.map(s => s.episode ?? 0)) + 1
+
+/**
+ * The first skit of a reply is the series' next episode: it gets its number,
+ * and the regulars it brings back keep their look when the model gave none.
+ */
+export function numberEpisodes(made: readonly MuseSkit[], muse: Muse): MuseSkit[] {
+  if (made.length === 0) return []
+  const regulars = storyOf(muse).cast
+  const [first, ...rest] = made
+  const cast = first!.cast.map(a => {
+    const regular = regulars.find(r => r.name.toLowerCase() === a.name.toLowerCase())
+    return regular && !a.look ? { ...a, look: regular.look } : a
+  })
+  return [{ ...first!, cast, episode: nextEpisode(muse) }, ...rest]
+}
+
+function storyLines(story: Story | undefined): string[] {
+  const out: string[] = []
+  if (story && story.previously.length > 0) {
+    const last = story.previously[story.previously.length - 1]!
+    out.push(
+      `The first skit is episode ${last.episode + 1} of an ongoing series. Previously: ${story.previously.map(p => `ep. ${p.episode} "${p.title}": ${p.summary}`).join(' ')} ` +
+        `Pick up from there (a running gag, a rival coming back, a quest going on) with its regulars: ${story.cast.map(a => `${a.name} (${a.color})`).join(', ')}; keep their names and colors, one guest may join. The second skit stands on its own.`,
+    )
+  } else out.push('The first skit is episode 1 of a new series: introduce its regular cast, with names worth coming back to. The second skit stands on its own.')
+  if (story && story.news.length > 0) out.push(`Lately in the coding session: ${story.news.join('; ')}. Work that into the first skit: its trouble, its twist or its ending.`)
+  return out
+}
+
+export function skitPrompt(kind: Kind, detail: string | undefined, lang: Lang, seed: number, story?: Story): string {
   return [
     PREAMBLE,
     `The coding agent is ${KIND_WORDS[kind]}${detail ? ` (now: ${detail})` : ''}. Write 2 skits that play while it does that: the Clawds acting out, joking about or helping with that kind of work, in their own way.`,
     seedLine(seed),
     'Be inventive and make the two skits very different: different places, casts, props, actions and gags. Think of scenes from films, novels and shows: a band on stage, a car chase, a cooking duel, a kung fu fight, a magic trick, a parade. A skit lasts 8 to 30 seconds.',
+    'Each skit tells a tiny story: a setup, then trouble or a twist (something breaks, a rival shows up, a plan goes wrong), then how it is solved or a punchline. Every beat moves it on; do not just cheer in a loop.',
+    ...storyLines(story),
     'Reply exactly in this shape (the values only show the format: invent your own):',
     JSON.stringify({ skits: [EXAMPLE] }),
-    `Rules. title, names and every say: in ${LANG_NAMES[lang]}; title and say at most ${TITLE_W} characters, names at most ${NAME_W}; say may be "".`,
+    `Rules. title, names, summary, every say and caption: in ${LANG_NAMES[lang]}; title and say at most ${TITLE_W} characters, names at most ${NAME_W}, a caption at most ${CAPTION_W}, the summary at most ${SUMMARY_W}; say may be "". summary: what happened, in one sentence, for the next episode to follow on. A beat may have a caption, the narrator's line shown over it ("Meanwhile...", "Three bugs later", "Plot twist!"): use a few, where they help the story.`,
     `place: backdrop one of ${BACKDROPS.join(', ')}; sky one of ${SKIES.join(', ')}; weather one of ${WEATHERS.join(', ')}; colors are #rrggbb on a dark terminal (far dim, near brighter, ground the floor, accent bright). place may be null.`,
     `cast: 1 to ${MAX_CAST} Clawds, each with a name, a body color #rrggbb (the first is usually Clawd, ${CLAWD_COLOR}) and a look or null. look (like Clawd's stickers: coffee, headphones, a wand, a crown, sunglasses...): eyes one of ${EYES.join(', ')}; shiny true for a holographic shimmer (rarely); hat 0 to ${HAT_H} rows of up to ${HAT_W} characters on the head; held 0 to ${HELD_H} rows of up to ${HELD_W} characters in a hand.`,
     `props: 0 to ${MAX_PROPS}, each with a short lowercase id, x from 0 (left) to 1 (right), motion one of ${MOTIONS.join(', ')}, an effect that keeps going around it (or "none"), and 1 to 3 frames of up to ${PROP_H} rows of up to ${PROP_W} characters. Props can be instruments, vehicles, food, tools, animals, signs, anything: draw them recognizable.`,
@@ -568,7 +621,8 @@ function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly Ski
     const secs = typeof item.secs === 'number' && Number.isFinite(item.secs) ? Math.min(6, Math.max(1, item.secs)) : 2
     if (total + secs > MAX_SECS) break
     total += secs
-    out.push({ secs, acts })
+    const caption = line(item.caption, CAPTION_W)
+    out.push({ secs, acts, ...(caption && !isPlaceholder(caption) ? { caption } : {}) })
   }
   return out
 }
@@ -611,7 +665,8 @@ export function parseSkits(text: string, kind: Kind): MuseSkit[] {
     if (beats.length < 2) continue
     // Only the moves some act uses.
     const used = moves.filter(m => beats.some(b => b.acts.some(a => a.move === m.name)))
-    out.push({ kind, title, place: readPlace(item.place), cast, props, ...(used.length > 0 ? { moves: used } : {}), beats })
+    const summary = line(item.summary, SUMMARY_W)
+    out.push({ kind, title, place: readPlace(item.place), cast, props, ...(used.length > 0 ? { moves: used } : {}), beats, ...(summary && !isPlaceholder(summary) ? { summary } : {}) })
   }
   return out
 }

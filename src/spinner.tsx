@@ -8,7 +8,7 @@ import { createStore, produce } from 'solid-js/store'
 import { SoundSeed, seedFrom } from './audio'
 import type { Config } from './config'
 import { lang, m } from './i18n'
-import { kindOf, lightestVariant, museNeed, parseModel, parseSkits, skitPrompt, upgradeSkit } from './muse'
+import { NEWS_FRESH_MS, kindOf, lightestVariant, museNeed, numberEpisodes, parseModel, parseSkits, skitPrompt, storyOf, upgradeSkit } from './muse'
 import type { Muse, MuseSkit } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
 import type { News } from './pet'
@@ -82,6 +82,13 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   const [museState, setMuseState] = createSignal<MuseState>({ isBusy: false, error: null, via: null, at: 0, made: 0 })
   // Set once opencode's free tier turns a direct call down: from then on, ask through the session.
   let viaSession = false
+  // What happened in the coding session lately (tests, commits, how turns ended), for the muse's story.
+  const happenings: { what: string; at: number }[] = []
+  const happened = (what: string) => {
+    happenings.push({ what, at: Date.now() })
+    if (happenings.length > 6) happenings.shift()
+  }
+  const NEWS_WORDS = { testFail: 'tests failed', testPass: 'tests passed', commit: 'a commit was made' } as const
 
   const later = (ms: number, fn: () => void) => {
     const id = setTimeout(() => {
@@ -148,6 +155,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   function noteNews(sid: string, command: string, isError: boolean): void {
     const kind = newsOf(command, isError)
     if (kind === null) return
+    happened(NEWS_WORDS[kind])
     const id = `${Date.now()}`
     edit(sid, r => void (r.news = { kind, id }))
     if (kind !== 'testFail') gainXp()
@@ -171,6 +179,8 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     })
     setAsks(produce(all => void delete all[sid]))
     if (kind === 'answer') gainXp()
+    if (kind === 'error') happened('a turn ended in an error')
+    else if (kind === 'aborted') happened('the user interrupted a turn')
     clearTimeout(sleepTimers.get(sid))
     sleepTimers.set(
       sid,
@@ -345,11 +355,12 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     // Skits for what the agent does now; an ask has none of its own.
     const kind = kindOf(r.act, tool) ?? 'think'
     if (!isForced && !museNeed(museOf(), kind, seed)) return null
-    const prompt = skitPrompt(kind, tool, lang(), seed)
+    const news = happenings.filter(h => Date.now() - h.at < NEWS_FRESH_MS).map(h => h.what)
+    const prompt = skitPrompt(kind, tool, lang(), seed, storyOf(museOf(), news))
     setMuseState(s => ({ ...s, isBusy: true }))
     return withTimeout(askModel(prompt, sid), MUSE_TIMEOUT_MS)
       .then(({ text, via }) => {
-        const made = parseSkits(text, kind)
+        const made = numberEpisodes(parseSkits(text, kind), museOf())
         if (made.length === 0) throw new Error(`nothing usable in the reply: ${text.slice(0, 80)}`)
         void updateMuse(d => void (d.skits = [...made, ...(d.skits ?? [])].slice(0, MUSE_KEEP)))
         setMuseState(s => ({ ...s, isBusy: false, error: null, via, made: s.made + made.length }))

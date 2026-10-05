@@ -57,6 +57,7 @@ export const SAMPLE_SKITS = {
     },
     {
       title: 'Release party',
+      summary: 'Clawd shipped v2.0, Mo got lifted for a photo, and Dot proposed to Mo.',
       place: { backdrop: 'room', sky: 'none', weather: 'confetti', colors: { far: '#1f2335', near: '#3d2f5b', ground: '#2f2a3d', accent: '#ff8fab' } },
       cast: [
         { name: 'Clawd', color: '#d77757', look: { eyes: 'shades', colors: {}, hat: [], held: [] } },
@@ -74,9 +75,9 @@ export const SAMPLE_SKITS = {
       beats: [
         { secs: 3, acts: [{ who: 'Clawd', do: 'moonwalk', to: 0.2, say: 'shipped!' }, { who: 'Mo', do: 'clap' }, { who: 'Dot', do: 'juggle', prop: 'ball' }] },
         { secs: 3, acts: [{ who: 'Clawd', do: 'lift', with: 'Mo', say: 'v2.0!' }, { who: 'Dot', do: 'photo', prop: 'camera', with: 'Mo' }] },
-        { secs: 3, acts: [{ who: 'Mo', do: 'waltz', with: 'Dot' }, { who: 'Clawd', do: 'robot', say: 'beep boop' }] },
+        { secs: 3, caption: 'Later that night...', acts: [{ who: 'Mo', do: 'waltz', with: 'Dot' }, { who: 'Clawd', do: 'robot', say: 'beep boop' }] },
         { secs: 2, acts: [{ who: 'Clawd', do: 'teleport', to: 0, say: 'ta-da' }, { who: 'Mo', do: 'laugh' }, { who: 'Dot', do: 'salute' }] },
-        { secs: 2, acts: [{ who: 'Clawd', do: 'flip' }, { who: 'Mo', do: 'cheer' }, { who: 'Dot', do: 'kneel', with: 'Mo' }] },
+        { secs: 2, caption: 'Plot twist!', acts: [{ who: 'Clawd', do: 'flip' }, { who: 'Mo', do: 'cheer' }, { who: 'Dot', do: 'kneel', with: 'Mo' }] },
       ],
     },
   ],

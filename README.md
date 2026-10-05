@@ -47,6 +47,10 @@ When none of those fits, the model can make up its own moves for a skit: a moonw
 
 A beat can set off an effect (sparks, hearts, notes, zzz, steam, confetti, stars, bubbles, lightning, smoke, rain, `?`, `!`, an impact, dust, a thought bubble, tears, fire, wind), and any Clawd can say a line in your language. Many actions bring their own effect: notes for music, dust for running, an impact for a punch.
 
+Every skit is asked to tell a small story: a setup, then trouble or a twist (something breaks, a rival shows up, a plan goes wrong), then a fix or a punchline. A beat can carry a narrator's caption ("Later that night...", "Plot twist!"), shown at the top right while it plays.
+
+Skits also form a running series. The first skit of every batch is the next episode: the request recalls the last three episodes (each skit comes with a one-sentence summary) and the regular cast, and asks the model to pick up from there. Returning regulars keep their names, colors and outfits, and the title shows the episode number (`▸ Ep.5 ...`). The second skit of a batch stands on its own. What happened in your session in the last 30 minutes (tests failing or passing, commits, a turn that errored or was interrupted) goes into the request too, to become the episode's trouble, twist or ending. Episodes are written for different kinds of work, so the show may play them out of order.
+
 To keep batches varied, each request asks for two very different skits and names a kind of scene from films, novels and shows to stage one of them like: a rock concert, a heist, a western showdown, a cooking show, a haunted house, a rom-com meet-cute, and 28 more.
 
 A skit runs 8 to 36 seconds. These four are hand-written samples (real ones come from the model); the last one uses two made-up moves:

@@ -67,7 +67,10 @@ export function overlay(g: Grid, x: number, y: number, text: string, style: Styl
   let col = Math.round(x)
   for (const ch of text) {
     const under = row[col]
-    const bg = under ? (under.ch === '█' ? under.c : under.bg) : undefined
+    // A full block's color, the background of a two-color cell, or the color of a cell mostly filled.
+    const bits = under && !under.bg ? octantBits(under.ch) : null
+    const mostly = bits !== null && popcount(bits) >= 5
+    const bg = under ? (under.ch === '█' || mostly ? under.c : under.bg) : undefined
     put(g, col, y, ch, bg && !style.bg ? { ...style, bg } : style)
     col += cpWidth(ch.codePointAt(0)!)
   }
@@ -166,6 +169,12 @@ const OCTANTS: string[] = (() => {
 })()
 
 /** Which fine pixels a block character fills (bits as in OCTANTS), or null for any other character. */
+const popcount = (n: number) => {
+  let c = 0
+  for (let v = n; v; v &= v - 1) c++
+  return c
+}
+
 export function octantBits(ch: string): number | null {
   const bits = OCTANTS.indexOf(ch)
   return bits > 0 ? bits : null

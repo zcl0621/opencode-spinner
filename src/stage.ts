@@ -1049,8 +1049,27 @@ export function skitScene(raw: MuseSkit, t: number, w: number, seed = 0): Grid {
     used.add(row)
     speech(g, l.say, a.x, row)
   }
-  if (t < TITLE_TICKS) {
-    overlay(g, 1, 0, `▸ ${skit.title}`, { c: place?.colors.accent ?? '#e9b49a', d: t > TITLE_TICKS - 6 })
+  const title = `▸ ${skit.episode !== undefined ? `Ep.${skit.episode} ` : ''}${skit.title}`
+  if (t < TITLE_TICKS) overlay(g, 1, 0, title, { c: place?.colors.accent ?? '#e9b49a', d: t > TITLE_TICKS - 6 })
+  // The narrator's caption for the beat playing, at the top right (after the title, if they would meet).
+  const caption = captionAt(skit, Math.min(t, skitLength(skit) - 1))
+  if (caption) {
+    const shown = `~ ${caption.text} ~`
+    const cw = textWidth(shown)
+    const x = Math.max(0, w - cw - 1)
+    const meets = t < TITLE_TICKS && x < textWidth(title) + 3
+    if (!meets && cw <= w) overlay(g, x, 0, shown, { c: '#c0caf5', d: caption.e < 3 })
   }
   return g
+}
+
+/** The caption of the beat playing at tick `t`, and how many ticks into the beat. */
+function captionAt(skit: MuseSkit, t: number): { text: string; e: number } | null {
+  let from = 0
+  for (const beat of skit.beats) {
+    const d = Math.max(1, Math.round(beat.secs * TPS))
+    if (t < from + d) return beat.caption ? { text: beat.caption, e: t - from } : null
+    from += d
+  }
+  return null
 }

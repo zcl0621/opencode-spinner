@@ -6,7 +6,7 @@ import { expect, test } from 'bun:test'
 import { AUDIO_BANDS, SoundSeed, lineSplitter, parseTapLine, seedFrom } from '../src/audio'
 import { canvas, cells, dot, octantBits, plot } from '../src/cells'
 import { VIGNETTES, benchScene, poolOf, toolKind, vignetteAt } from '../src/clawd'
-import { ACTIONS, BACKDROPS, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, museNeed, parseModel, parseSkits, seedLine, skitPrompt } from '../src/muse'
+import { ACTIONS, BACKDROPS, CAPTION_W, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, museNeed, numberEpisodes, parseModel, parseSkits, seedLine, skitPrompt, storyOf } from '../src/muse'
 import type { Muse, MuseSkit } from '../src/muse'
 import { SHOW_ROWS, nextStage, showScene, stretchAt } from '../src/show'
 import { castAt, skitLength, skitScene } from '../src/stage'
@@ -543,4 +543,57 @@ test('muse: a skit can make up its own moves, checked like the rest, and the the
     for (const row of g) expect(widthOf(row)).toBe(w)
   }
   expect(skitPrompt('think', undefined, 'en', 1)).toContain('moves: 0 to 4 moves you invent')
+})
+
+test('the story: captions and summaries are read, episodes numbered, and the prompt recalls the series and the news', () => {
+  const reply = (title: string, name: string, look: unknown = null) => JSON.stringify({ skits: [
+    {
+      title, summary: `${name} lost the bug, then found it in the soup.`,
+      cast: [{ name: 'Clawd' }, { name, color: '#7aa2f7', look }],
+      beats: [
+        { secs: 2, caption: 'Meanwhile, in the kitchen', acts: [{ who: 'Clawd', do: 'walk' }] },
+        { secs: 2, caption: '<narrator>', acts: [{ who: name, do: 'stir' }] },
+        { secs: 2, caption: 'x'.repeat(60), acts: [{ who: 'Clawd', do: 'cheer' }] },
+      ],
+    },
+    { title: 'Standalone', summary: '<what happened, in one sentence>', beats: [{ do: 'wave' }, { do: 'bow' }] },
+  ] })
+  const hat = { colors: { A: '#ffd166' }, hat: ['AAAA'], held: [] }
+  const one = parseSkits(reply('Soup', 'Bloop', hat), 'think')
+  expect(one[0]!.summary).toBe('Bloop lost the bug, then found it in the soup.')
+  expect(one[0]!.beats.map(b => b.caption)).toEqual(['Meanwhile, in the kitchen', undefined, 'x'.repeat(CAPTION_W)])
+  expect(one[1]!.summary).toBeUndefined()
+
+  // The first skit of each reply is the next episode; the second stands alone.
+  let kept = numberEpisodes(one, { skits: [] })
+  expect(kept.map(k => k.episode)).toEqual([1, undefined])
+  for (let i = 2; i <= 5; i++) {
+    // Later episodes bring Bloop back without a look: he keeps his hat.
+    const next = numberEpisodes(parseSkits(reply(`Ep${i}`, 'BLOOP'), 'edit'), { skits: kept })
+    expect(next[0]!.episode).toBe(i)
+    expect(next[0]!.cast[1]!.look!.hat).toEqual(['AAAA'])
+    kept = [...next, ...kept]
+  }
+  const story = storyOf({ skits: kept }, ['tests failed', 'a commit was made'])
+  expect(story.previously.map(p => p.episode)).toEqual([3, 4, 5])
+  expect(story.cast.map(a => a.name)).toEqual(['Clawd', 'BLOOP'])
+  const prompt = skitPrompt('edit', undefined, 'en', 7, story)
+  expect(prompt).toContain('episode 6 of an ongoing series')
+  expect(prompt).toContain('ep. 5 "Ep5": BLOOP lost the bug')
+  expect(prompt).toContain('BLOOP (#7aa2f7)')
+  expect(prompt).toContain('Lately in the coding session: tests failed; a commit was made.')
+  expect(prompt).toContain('a setup, then trouble or a twist')
+  expect(skitPrompt('edit', undefined, 'en', 7, storyOf({ skits: [] }))).toContain('episode 1 of a new series')
+
+  // On stage: the episode in the title, the caption over its beat, at any width.
+  const ep = kept[0]!
+  const texts: string[] = []
+  for (const w of [16, 40, 90]) for (let t = 0; t < skitLength(ep) + 3; t++) {
+    const g = skitScene(ep, t, w, 1)
+    for (const row of g) expect(widthOf(row)).toBe(w)
+    if (w === 90) texts.push(g[0]!.map(c => c.ch).join(''))
+  }
+  expect(texts[0]).toContain('Ep.5 Ep5')
+  expect(texts.slice(0, 20).join('\n')).toContain('Meanwhile, in the kitchen')
+  expect(texts.slice(25, 40).join('\n')).not.toContain('Meanwhile')
 })
