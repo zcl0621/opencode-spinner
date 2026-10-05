@@ -144,10 +144,10 @@ let fy = 1
 const shots: [string, FinaleKind, number, number][] = []
 const NAMES: Record<FinaleKind, string[]> = {
   answer: ['fireworks', 'confetti cannon', 'curtain call', 'trophy', 'disco', 'rainbow dash', 'high-five', 'level up'],
-  aborted: ['rain cloud', 'shrug', 'walk off'],
-  error: ['glitch', 'explosion', 'short circuit'],
+  aborted: ['rain cloud', 'shrug', 'walk off', 'lights out', 'hook', 'doze off', 'balloon', 'tumbleweed'],
+  error: ['glitch', 'explosion', 'short circuit', 'blue screen', 'repair', 'shatter', 'on fire', 'bugs'],
 }
-const AT: Record<FinaleKind, number[]> = { answer: [14, 16, 20, 16, 12, 18, 15, 10], aborted: [12, 4, 20], error: [7, 13, 8] }
+const AT: Record<FinaleKind, number[]> = { answer: [14, 16, 20, 16, 12, 18, 15, 10], aborted: [12, 4, 20, 16, 18, 20, 8, 14], error: [7, 13, 8, 20, 16, 20, 15, 20] }
 for (const kind of ['answer', 'aborted', 'error'] as const) {
   for (let n = 0; n < FINALE_VARIANTS[kind]; n++) shots.push([NAMES[kind][n]!, kind, n, AT[kind][n]!])
 }

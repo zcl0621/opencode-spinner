@@ -103,9 +103,9 @@ Each turn it puts on a new outfit, picked by the turn's seed: a party hat, a cro
 
 With the pet turned off (`companion: false`), Clawd stands in front of opencode's own progress bar instead (`▐▛█▜▌▭▭ ⬝⬝⬝■■ esc interrupt`).
 
-A finished turn gets one of eight four-second finales next to the time taken (`✻ Done · 12s`): fireworks, a confetti cannon, a curtain call with the whole cast, a trophy, a disco ball, a rainbow dash, a high five, a level-up glow. An interrupted turn gets a rain cloud, a shrug or a walk-off; an error a glitch, an explosion or a short circuit. Which one plays follows the turn, so two turns in a row rarely match.
+A finished turn gets one of eight four-second finales next to the time taken (`✻ Done · 12s`): fireworks, a confetti cannon, a curtain call with the whole cast, a trophy, a disco ball, a rainbow dash, a high five, a level-up glow. An interrupted turn gets one of eight too: a rain cloud, a shrug, a walk-off, the stage lights going out, a vaudeville hook, dozing off, a balloon going flat, a tumbleweed. So does an error: a glitch, an explosion, a short circuit, a blue screen, a mechanic Clawd hammering him back together, shattering into pieces, his head on fire, a swarm of bugs. Which one plays follows the turn, so two turns in a row rarely match.
 
-![All fourteen finales](assets/finale.svg)
+![All twenty-four finales](assets/finale.svg)
 
  Under 60 columns or 20 rows the show steps aside and the pet shrinks to one line. The pet is four rows tall: the top one holds its hat. The **Spinner** label in the prompt footer turns all animations off and on.
 

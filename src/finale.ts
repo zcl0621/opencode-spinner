@@ -2,8 +2,10 @@
 // each time (picked by the finale's id). A finished turn gets a celebration
 // (fireworks, a confetti cannon, a curtain call, a trophy, a disco, a rainbow
 // dash, a high-five, a level-up), an interrupted one a little sadness (a rain
-// cloud, a shrug, a walk off), an error some trouble (a glitch, an explosion,
-// a short circuit). The label (`Done · 12s`) always reads. Pure: a function of
+// cloud, a shrug, a walk-off, the lights going out, a hook, dozing off, a
+// balloon going flat, a tumbleweed), an error some trouble (a glitch, an
+// explosion, a short circuit, a blue screen, a repair, shattering, catching
+// fire, bugs). The label (`Done · 12s`) always reads. Pure: a function of
 // the kind, the label, the tick, the width and the id.
 import { blank, canvas, cells, dot, mod, noise, overlay, put, textWidth } from './cells'
 import type { Canvas, Grid, Style } from './cells'
@@ -264,6 +266,87 @@ function walkOff(s: Scene, x: number): void {
   clawd(s, x - go * (x + CLAWD_W), STAND - (go > 0 && alt(s.t, 2) ? 1 : 0), { right: s.t < 12 ? (alt(s.t, 2) ? 'up' : 'mid') : 'out', legs: go > 0 && alt(s.t, 2) ? 'step' : 'stand', mirror: go > 0 })
 }
 
+/** The stage lights go out one by one; the spotlight on him fades last. */
+function lightsOut(s: Scene, x: number): void {
+  const lamps = Math.floor(s.w / 5)
+  const lit = Math.max(0, lamps - Math.floor(s.t / 2.5))
+  const cx = (x + CLAWD_W / 2) * 2
+  const spot = Math.max(0, Math.min(1, (s.t - 26) / 10))
+  // The spotlight: a cone from the top onto him.
+  for (let fy = 2; fy < FLOOR * 2 + 1; fy++) {
+    const half = 2 + fy * 0.55
+    for (let fx = Math.ceil(cx - half); fx <= cx + half; fx++) if (mod(fx + fy, 2) === 0) dot(s.cv, fx, fy, fade('#8a7f45', 0.15 + spot * 0.85))
+  }
+  for (let i = 0; i < lamps; i++) {
+    const on = i < lit
+    for (let dx = 0; dx < 3; dx++) dot(s.cv, i * 10 + 4 + dx, 0, on ? '#ffd166' : '#3b3640')
+    if (on) dot(s.cv, i * 10 + 5, 1, '#fff3c4')
+  }
+  clawd(s, x, STAND, { left: 'down', right: s.t > 24 && s.t < 30 ? 'up' : 'down', eyes: 'closed', color: fade(CLAUDE, Math.min(0.7, spot * 0.7)) })
+}
+
+/** A vaudeville hook comes in from the side and drags him off. */
+function hook(s: Scene, x: number): void {
+  const reach = Math.min(1, s.t / 10)
+  const drag = Math.max(0, (s.t - 14) / 20)
+  const cx = x - drag * (x + CLAWD_W + 2)
+  const shake = s.t >= 10 && s.t < 14 && alt(s.t, 1) ? 0.5 : 0
+  clawd(s, cx + shake, STAND, { left: s.t >= 10 ? 'up' : 'out', right: s.t >= 10 ? 'up' : 'out', eyes: s.t >= 10 ? 'dizzy' : 'normal', legs: drag > 0 && alt(s.t, 1) ? 'step' : 'stand' })
+  // The pole from the left edge, its crook around his waist.
+  const tip = (cx + 3) * 2 * reach
+  const fy = STAND * 2 + 8
+  for (let fx = 0; fx < tip; fx++) dot(s.cv, fx, fy, '#c8a165')
+  for (let a = 0; a <= 6; a++) {
+    const ang = Math.PI * (0.5 + a / 6)
+    dot(s.cv, tip + 3 + Math.cos(ang) * 3, fy - 3 + Math.sin(ang) * -3, '#c8a165')
+  }
+}
+
+/** He sits down and nods off; z's float up. */
+function dozeOff(s: Scene, x: number): void {
+  const nod = alt(s.t, 6) ? 1 : 0
+  clawd(s, x, STAND + nod * 0.5, { left: 'down', right: 'down', eyes: s.t > 6 ? 'closed' : 'normal', low: s.t > 4 })
+  s.after.push(g => {
+    for (let i = 0; i < 3; i++) {
+      const age = mod(s.t - 6 - i * 6, 18)
+      if (s.t < 6 + i * 6) continue
+      mark(g, x + CLAWD_W - 3 + Math.floor(age / 4), Math.max(0, 3 - Math.floor(age / 4)), i === 1 ? 'Z' : 'z', { c: '#a9b1d6', d: age > 12 })
+    }
+  })
+}
+
+/** His balloon shrinks, sputters and drops. */
+function balloon(s: Scene, x: number): void {
+  const hx = (x + CLAWD_W - 1) * 2
+  const r = Math.max(0, 5 - s.t * 0.17)
+  const fall = Math.max(0, s.t - 30)
+  const wob = r > 0 ? Math.round(Math.sin(s.t * 1.3) * (5 - r) * 0.5) : 0
+  const by = 5 + fall * fall * 0.15
+  clawd(s, x, STAND, { left: 'down', right: s.t < 30 ? 'up' : 'out', eyes: s.t < 30 ? 'normal' : 'closed' })
+  const color = PARTY[s.salt % PARTY.length]!
+  for (let dy = -Math.ceil(r); dy <= r; dy++) for (let dx = -Math.ceil(r); dx <= r; dx++) {
+    if (dx * dx + dy * dy * 0.8 <= r * r) dot(s.cv, hx + wob + dx, by + dy, dx === -1 && dy === -1 ? '#fff3c4' : color)
+  }
+  if (r < 1 && fall < 20) dot(s.cv, hx + wob, by, color)
+  // The string down to his raised hand.
+  if (fall === 0) for (let fy = by + Math.ceil(r) + 1; fy < STAND * 2; fy++) dot(s.cv, hx + (fy % 2 ? 0 : wob), fy, '#a9b1d6')
+}
+
+/** Wind, and a tumbleweed rolling past. */
+function tumbleweed(s: Scene, x: number): void {
+  clawd(s, x, STAND, { left: 'down', right: 'down', eyes: 'normal' })
+  const tx = s.w * 2 + 8 - s.t * (s.w * 2 + 16) / 30
+  const bounce = Math.abs(Math.sin(s.t * 0.6)) * 4
+  const ty = FLOOR * 2 - 3 - bounce
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 - s.t * 0.5
+    for (const r of [1.5, 3]) dot(s.cv, tx + Math.cos(a) * r, ty + Math.sin(a) * r, i % 3 ? '#a0794a' : '#c8a165')
+  }
+  s.after.push(g => {
+    for (let i = 0; i < 3; i++) mark(g, mod(Math.floor(-s.t * 1.5) + i * 17, s.w), 1 + i, '~', { c: '#565f89' })
+  })
+}
+
 // ---- an error ---------------------------------------------------------------------------
 
 /** The band glitches: rows slip sideways, red blocks flicker. */
@@ -308,13 +391,101 @@ function shortCircuit(s: Scene, x: number): void {
   })
 }
 
+const BLUE = '#1f4fbf'
+
+/** The blue screen: the band goes blue, a sad face, a progress bar. */
+function blueScreen(s: Scene, x: number): void {
+  const fill = Math.min(1, s.t / 4)
+  for (let fy = 0; fy < ROWS * 4; fy++) for (let fx = 0; fx < s.w * 2 * fill; fx++) dot(s.cv, fx, fy, BLUE)
+  clawd(s, x, STAND, { left: 'down', right: 'down', eyes: 'dizzy', color: s.t > 4 ? '#e8e8f0' : undefined })
+  // Dots of "text" and a bar that fills to some percent.
+  if (s.t > 6) {
+    const lx = 4
+    for (let row = 0; row < 3; row++) for (let fx = 0; fx < 10 + row * 4; fx++) if (noise(fx * 3 + row * 31) < 0.7) dot(s.cv, lx + fx, 4 + row * 3, '#c0caf5')
+    const done = Math.min(1, (s.t - 6) / 30)
+    for (let fx = 0; fx < 24; fx++) dot(s.cv, lx + fx, FLOOR * 2 - 1, fx < done * 24 ? '#ffffff' : '#3d6fe0')
+  }
+  if (s.t > 6) s.after.push(g => overlay(g, Math.max(0, x - 4), 1, ':(', { c: '#ffffff', b: true }))
+}
+
+/** He smokes; a mechanic Clawd in a hard hat walks in and hammers him back together. */
+function repair(s: Scene, x: number): void {
+  clawd(s, x, STAND, { left: 'down', right: 'down', eyes: s.t > 30 ? 'happy' : 'dizzy' })
+  const arrive = Math.min(1, s.t / 12)
+  const mx = s.w + 1 - (s.w + 1 - (x + CLAWD_W + 1)) * arrive
+  const hammer = s.t > 12 && alt(s.t, 2)
+  clawd(s, mx, STAND, { left: hammer ? 'up' : 'mid', right: 'down', legs: arrive < 1 && alt(s.t, 1) ? 'step' : 'stand', mirror: true, color: CAST[(s.salt + 2) % CAST.length] })
+  // His hard hat.
+  for (let fx = 4; fx < CLAWD_W * 2 - 4; fx++) for (let fy = -2; fy < 0; fy++) dot(s.cv, mx * 2 + fx, STAND * 2 + fy, '#ffd166')
+  s.after.push(g => {
+    for (let i = 0; i < 3; i++) {
+      const age = mod(s.t + i * 4, 12)
+      if (s.t < 30) mark(g, x + 3 + i * 3, Math.max(0, 1 - Math.floor(age / 6)), '∘', { c: '#787c99', d: age > 6 })
+    }
+    if (s.t > 12 && hammer) mark(g, x + CLAWD_W, 3, '✦', { c: '#ffd166', b: true })
+  })
+}
+
+/** Cracks run across him, then he falls apart in pieces. */
+function shatter(s: Scene, x: number): void {
+  const whole: Canvas = canvas(s.w, ROWS)
+  const ss: Scene = { ...s, cv: whole }
+  clawd(ss, x, STAND, { left: 'out', right: 'out', eyes: s.t > 4 ? 'dizzy' : 'normal' })
+  const cx = (x + CLAWD_W / 2) * 2
+  if (s.t >= 4) {
+    // A zigzag crack down his middle.
+    for (let fy = STAND * 2; fy < FLOOR * 2; fy++) dot(whole, cx + (mod(fy, 4) < 2 ? 1 : -1) * Math.min(1, (s.t - 4) / 4) * 2, fy, '#fff3c4')
+  }
+  const age = Math.max(0, s.t - 12)
+  for (let fy = 0; fy < whole.h * 2; fy++) for (let fx = 0; fx < whole.w * 2; fx++) {
+    const c = whole.px[fy * whole.w * 2 + fx]
+    if (!c) continue
+    const k = Math.floor(fx / 4) * 31 + Math.floor(fy / 4) * 7
+    const vx = (noise(k + s.salt) - 0.5) * 1.2 + (fx < cx ? -0.4 : 0.4)
+    const y = Math.min(FLOOR * 2 + 1, fy + age * age * (0.08 + noise(k * 3) * 0.06))
+    dot(s.cv, fx + vx * age, y, c)
+  }
+}
+
+/** His head catches fire and he runs back and forth. */
+function onFire(s: Scene, x: number): void {
+  const run = Math.sin(s.t * 0.35) * 3
+  const px = x + run
+  clawd(s, px, STAND - (alt(s.t, 1) ? 1 : 0), { left: 'up', right: 'up', legs: alt(s.t, 1) ? 'step' : 'stand', eyes: 'dizzy', mirror: Math.cos(s.t * 0.35) < 0 })
+  const top = (STAND - (alt(s.t, 1) ? 1 : 0)) * 2
+  for (let fx = 4; fx < CLAWD_W * 2 - 4; fx++) {
+    const n = noise(fx * 7 + s.t * 13)
+    const hgt = n < 0.2 ? 1 : 2 + n * 7 - Math.abs(fx - CLAWD_W) * 0.2
+    for (let j = 0; j < hgt; j++) dot(s.cv, px * 2 + fx, top - 1 - j, j < 1 ? '#f7768e' : j < 3 ? '#ff9e64' : '#ffd166')
+  }
+}
+
+const BUG = ['.A.A.', 'BBBBB', '.BBB.']
+
+/** Bugs crawl out and swarm him; he flails. */
+function bugs(s: Scene, x: number): void {
+  const flail = alt(s.t, 2)
+  clawd(s, x, STAND, { left: flail ? 'up' : 'out', right: flail ? 'out' : 'up', eyes: 'dizzy' })
+  const cx = (x + CLAWD_W / 2) * 2
+  const n = Math.min(7, 1 + Math.floor(s.t / 4))
+  for (let i = 0; i < n; i++) {
+    const a = noise(i * 13 + s.salt) * Math.PI * 2 + s.t * (0.15 + noise(i) * 0.15) * (i % 2 ? 1 : -1)
+    const r = 10 + noise(i * 5) * 8
+    const bx = cx + Math.cos(a) * r * 1.4
+    const by = STAND * 2 + 6 + Math.sin(a) * r * 0.45
+    BUG.forEach((row, j) => [...row].forEach((ch, k) => {
+      if (ch !== '.') dot(s.cv, bx + k - 2, by + j, ch === 'A' ? '#565f89' : i % 2 ? '#9ece6a' : '#bb9af7')
+    }))
+  }
+}
+
 const SCENES: Record<FinaleKind, ((s: Scene, x: number) => void)[]> = {
   answer: [fireworks, cannon, curtainCall, trophy, disco, rainbowDash, highFive, levelUp],
-  aborted: [rainCloud, shrug, walkOff],
-  error: [glitch, explosion, shortCircuit],
+  aborted: [rainCloud, shrug, walkOff, lightsOut, hook, dozeOff, balloon, tumbleweed],
+  error: [glitch, explosion, shortCircuit, blueScreen, repair, shatter, onFire, bugs],
 }
 /** Variants that move the cast across the band: their label goes on the top row instead. */
-const ROAMING = new Set<(s: Scene, x: number) => void>([curtainCall, rainbowDash, highFive, disco])
+const ROAMING = new Set<(s: Scene, x: number) => void>([curtainCall, rainbowDash, highFive, disco, repair])
 
 /** The finale at tick `t`: `ROWS` rows of `w` cells, its variant picked by `id`. */
 export function finale(kind: FinaleKind, label: string, t: number, w: number, id = ''): Grid {
