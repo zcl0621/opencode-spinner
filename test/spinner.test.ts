@@ -15,7 +15,7 @@ setLang('en')
 
 type Handler = (event: { type: string; data: unknown }) => void
 
-function fake(options: Record<string, unknown> = {}, roots: Record<string, string> = {}, client: unknown = {}) {
+function fake(options: Record<string, unknown> = {}, roots: Record<string, string> = {}, client: unknown = {}, shown?: { route: string | null; tabs?: string[] }) {
   const handlers = new Map<string, Set<Handler>>()
   const toasts: string[] = []
   const storage = <T extends object>(initial: T) => {
@@ -37,7 +37,13 @@ function fake(options: Record<string, unknown> = {}, roots: Record<string, strin
       store: (_key: string, o: { initial: object }) => storage(o.initial),
       memory: (_key: string, o: { initial: object }) => storage(o.initial),
     },
-    ui: { toast: { show: (o: { message: string }) => toasts.push(o.message) } },
+    ui: {
+      toast: { show: (o: { message: string }) => toasts.push(o.message) },
+      ...(shown && {
+        router: { current: () => (shown.route ? { type: 'session', sessionID: shown.route } : { type: 'home' }) },
+        tabs: { enabled: () => !!shown.tabs, list: () => (shown.tabs ?? []).map(sessionID => ({ sessionID, active: false, busy: false, attention: false })) },
+      }),
+    },
   } as unknown as Plugin.Context
   const spinner = createSpinner(context, readConfig(options))
   const emit = (type: string, data: unknown) => handlers.get(type)?.forEach(h => h({ type, data }))
@@ -48,8 +54,8 @@ let current: Spinner | undefined
 afterEach(() => current?.dispose())
 
 /** No tap (it would build swiftc) and no model unless a test asks for them. */
-function start(options?: Record<string, unknown>, roots?: Record<string, string>, client?: unknown) {
-  const f = fake({ sound: false, model: false, ...options }, roots, client)
+function start(options?: Record<string, unknown>, roots?: Record<string, string>, client?: unknown, shown?: { route: string | null; tabs?: string[] }) {
+  const f = fake({ sound: false, model: false, ...options }, roots, client, shown)
   current = f.spinner
   return f
 }
@@ -328,4 +334,32 @@ test('the muse: a direct model is asked with its lightest reasoning variant, loo
   ])
   expect(lookups).toBe(1)
   expect(spinner.museState().via).toBe('x/thinker (minimal)')
+})
+
+test('several windows: only the one showing a session asks the muse and counts xp for it', async () => {
+  const asked: string[] = []
+  const client = { generate: { text: async (input: { prompt: string }) => (asked.push(input.prompt), reply(input.prompt)) } }
+  // This window shows another session; ses_a runs in a different window.
+  const away = start({ model: 'anthropic/claude-haiku-4-5' }, {}, client, { route: 'ses_other' })
+  away.emit('session.execution.started', { sessionID: S })
+  away.emit('session.execution.succeeded', { sessionID: S })
+  await Bun.sleep(0)
+  expect(asked.length).toBe(0)
+  expect(away.spinner.pet.xp).toBe(0)
+  // Its pet and finale still follow the session.
+  expect(away.spinner.run(S).finale?.kind).toBe('answer')
+  away.spinner.dispose()
+  // Shown as a tab, or open now: this window asks, and counts.
+  for (const shown of [{ route: 'ses_other', tabs: [S] }, { route: S }]) {
+    const here = start({ model: 'anthropic/claude-haiku-4-5' }, {}, client, shown)
+    const before = asked.length
+    here.emit('session.execution.started', { sessionID: S })
+    await Bun.sleep(0)
+    expect(asked.length).toBe(before + 1)
+    here.emit('session.execution.succeeded', { sessionID: S })
+    expect(here.spinner.pet.xp).toBe(1)
+    // The first skit kept is the next episode.
+    expect(here.spinner.muse().skits[0]!.episode).toBe(1)
+    here.spinner.dispose()
+  }
 })

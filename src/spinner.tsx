@@ -155,10 +155,11 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   function noteNews(sid: string, command: string, isError: boolean): void {
     const kind = newsOf(command, isError)
     if (kind === null) return
-    happened(NEWS_WORDS[kind])
+    const here = isHere(sid)
+    if (here) happened(NEWS_WORDS[kind])
     const id = `${Date.now()}`
     edit(sid, r => void (r.news = { kind, id }))
-    if (kind !== 'testFail') gainXp()
+    if (kind !== 'testFail' && here) gainXp()
     later(NEWS_MS, () => {
       if (run(sid).news?.id === id) edit(sid, r => void (r.news = null))
     })
@@ -178,9 +179,11 @@ export function createSpinner(context: Plugin.Context, config: Config) {
       r.finale = config.hasFinale ? { kind, label, id } : null
     })
     setAsks(produce(all => void delete all[sid]))
-    if (kind === 'answer') gainXp()
-    if (kind === 'error') happened('a turn ended in an error')
-    else if (kind === 'aborted') happened('the user interrupted a turn')
+    if (isHere(sid)) {
+      if (kind === 'answer') gainXp()
+      if (kind === 'error') happened('a turn ended in an error')
+      else if (kind === 'aborted') happened('the user interrupted a turn')
+    }
     clearTimeout(sleepTimers.get(sid))
     sleepTimers.set(
       sid,
@@ -195,6 +198,20 @@ export function createSpinner(context: Plugin.Context, config: Config) {
 
   /** A session's own event (not a subagent's): the sid, or null. */
   const own = (sid: string) => (rootOf(sid) === sid ? sid : null)
+  /**
+   * Whether this window shows the session: the one open now, or one of its tabs.
+   * Every window hears every session's events, so only this one asks the muse,
+   * counts xp and keeps the news for it. Unknown (an older opencode): yes.
+   */
+  const isHere = (sid: string): boolean => {
+    try {
+      const route = context.ui.router.current()
+      if (route.type === 'session' && rootOf(route.sessionID) === sid) return true
+      return context.ui.tabs.enabled() && context.ui.tabs.list().some(t => t.sessionID === sid)
+    } catch {
+      return true
+    }
+  }
 
   // One bad event must not take the band down with it.
   const on: typeof context.data.on = (type, handler) =>
@@ -346,7 +363,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
    */
   function inspire(sid: string, isEager = false, isForced = false): Promise<string[]> | null {
     const state = museState()
-    if (!isVisible() || !hasStage() || !parseModel(modelText()) || state.isBusy) return null
+    if (!isVisible() || !hasStage() || !parseModel(modelText()) || state.isBusy || !isHere(sid)) return null
     if (!isForced && Date.now() - state.at < (isEager ? 15_000 : MUSE_EVERY_MS)) return null
     const seed = freshSeed()
     setMuseState({ ...state, at: Date.now() })
@@ -360,9 +377,13 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     setMuseState(s => ({ ...s, isBusy: true }))
     return withTimeout(askModel(prompt, sid), MUSE_TIMEOUT_MS)
       .then(({ text, via }) => {
-        const made = numberEpisodes(parseSkits(text, kind), museOf())
+        const made = parseSkits(text, kind)
         if (made.length === 0) throw new Error(`nothing usable in the reply: ${text.slice(0, 80)}`)
-        void updateMuse(d => void (d.skits = [...made, ...(d.skits ?? [])].slice(0, MUSE_KEEP)))
+        // Numbered against what is kept at the moment of writing (another window may have just added an episode).
+        void updateMuse(d => {
+          const kept = d.skits ?? []
+          d.skits = [...numberEpisodes(made, { skits: kept.map(upgradeSkit) }), ...kept].slice(0, MUSE_KEEP)
+        })
         setMuseState(s => ({ ...s, isBusy: false, error: null, via, made: s.made + made.length }))
         return made.map(skit => skit.title)
       })
