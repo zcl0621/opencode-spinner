@@ -14,7 +14,7 @@ import { m, resolveLanguage, setLang } from './i18n'
 import { levelOf } from './pet'
 import { PET_ROWS } from './pets'
 import { kindOf } from './muse'
-import { nextStage } from './show'
+import { episodeDone, nextStage } from './show'
 import type { Stage } from './show'
 import { createSpinner } from './spinner'
 import type { Spinner } from './spinner'
@@ -127,7 +127,9 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
     const tick = t() - base
     if (sc.finale) return finaleScene(sc.finale.kind, sc.finale.label, tick, w, sc.finale.id)
     const tool = s.toolOf(sid()) || undefined
-    stage = nextStage(stage, kindOf(sc.act, tool), tick, s.muse())
+    stage = nextStage(stage, kindOf(sc.act, tool), tick, s.muse(), s.nextEpisode())
+    // Played through: the series moves on (for every window).
+    if (episodeDone(stage, tick)) s.markSeen(stage.episode!.episode!)
     return THEME.scene(tick, w, sc.act, tool, s.muse(), s.run(sid()).seed, stage)
   })
 

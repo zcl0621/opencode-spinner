@@ -439,3 +439,18 @@ test('a subagent sent to the background keeps the pet busy after the turn ends',
   running.clear()
   expect(spinner.stateOf(S)).toBe('ready')
 })
+
+test('an episode played through moves the series on', async () => {
+  const client = { generate: { text: async (input: { prompt: string }) => reply(input.prompt) } }
+  const { spinner } = start({ model: 'anthropic/claude-haiku-4-5' }, {}, client)
+  await spinner.inspireNow(S)
+  await spinner.inspireNow(S)
+  expect(spinner.muse().skits.filter(k => k.episode).map(k => k.episode)).toEqual([2, 1])
+  // Nothing seen yet: the newest plays next.
+  expect(spinner.nextEpisode()?.episode).toBe(2)
+  spinner.markSeen(2)
+  expect(spinner.nextEpisode()).toBeUndefined()
+  expect(spinner.muse().seen).toBe(2)
+  spinner.markSeen(1)
+  expect(spinner.muse().seen).toBe(2)
+})

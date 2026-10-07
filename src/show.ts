@@ -10,7 +10,7 @@ import { noise } from './cells'
 import type { Grid } from './cells'
 import { benchScene, benchSpan } from './clawd'
 import { kindOf, skitsFor } from './muse'
-import type { Kind, Muse } from './muse'
+import type { Kind, Muse, MuseSkit } from './muse'
 import { STAGE_ROWS, skitLength, skitScene } from './stage'
 import type { Act } from './themes'
 
@@ -27,12 +27,22 @@ const SETTLE = 15
  * skits for it were kept then (later ones wait for the next change, so the
  * one playing isn't swapped out).
  */
-export type Stage = { kind: Kind; since: number; count: number; pending?: { kind: Kind; at: number } }
+export type Stage = { kind: Kind; since: number; count: number; pending?: { kind: Kind; at: number }; episode?: MuseSkit }
 
-/** The stage after tick `t`, the agent doing `kind` (null: an ask, which changes nothing). */
-export function nextStage(prev: Stage | undefined, kind: Kind | null, t: number, muse: Muse | undefined): Stage {
+/** Whether the stage's episode has played through by tick `t`. */
+export const episodeDone = (stage: Stage | undefined, t: number): boolean => !!stage?.episode && t - stage.since >= skitLength(stage.episode)
+
+/**
+ * The stage after tick `t`, the agent doing `kind` (null: an ask, which changes
+ * nothing). `next` is the series' next episode not seen yet: it plays first,
+ * whatever the work, and holds the stage until it is over.
+ */
+export function nextStage(prev: Stage | undefined, kind: Kind | null, t: number, muse: Muse | undefined, next?: MuseSkit): Stage {
   const count = (k: Kind) => skitsFor(muse, k).length
-  if (!prev) return { kind: kind ?? 'think', since: t, count: count(kind ?? 'think') }
+  if (!prev) return { kind: kind ?? 'think', since: t, count: count(kind ?? 'think'), ...(next ? { episode: next } : {}) }
+  if (prev.episode && !episodeDone(prev, t)) return prev
+  // A new episode came in (or the one played is over and another waits): it comes on after the hold.
+  if (next && next.episode !== prev.episode?.episode && t - prev.since >= HOLD) return { kind: kind ?? prev.kind, since: t, count: count(kind ?? prev.kind), episode: next }
   if (kind === null || kind === prev.kind) {
     // New skits for the work playing come on once it has had its time.
     if (kind !== null && count(kind) > prev.count && t - prev.since >= HOLD * 4) return { kind, since: t, count: count(kind) }
@@ -68,7 +78,14 @@ export function showScene(t: number, w: number, act: Act, tool?: string, muse?: 
   // The skits kept when the stage began: newest first, so they are the last `count`.
   const all = skitsFor(muse, kind)
   const pool = stage ? all.slice(Math.max(0, all.length - stage.count)) : all
-  const now = stretchAt(t - since, w, (seed + since) % 100_003, pool.map(skitLength))
+  let local = t - since
+  // The episode first, from its opening card.
+  if (stage?.episode && act !== 'ask') {
+    const length = skitLength(stage.episode)
+    if (local < length) return skitScene(stage.episode, local, w, seed)
+    local -= length
+  }
+  const now = stretchAt(local, w, (seed + since) % 100_003, pool.map(skitLength))
   if (now.skit !== null && act !== 'ask') return skitScene(pool[now.skit]!, now.local, w, now.salt)
   // The bench. An ask during a skit shows him there with his sign (a lap's stop starts at 0).
   const bt = now.skit !== null ? now.local % 100 : now.start + now.local

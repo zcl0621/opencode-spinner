@@ -9,7 +9,7 @@ import { SoundSeed, seedFrom } from './audio'
 import type { Config } from './config'
 import { lang, m, resolveLanguage, setLang } from './i18n'
 import type { Lang } from './lang'
-import { NEWS_FRESH_MS, kindOf, lightestVariant, museNeed, numberEpisodes, parseModel, parseSkits, skitPrompt, storyOf, upgradeSkit } from './muse'
+import { NEWS_FRESH_MS, nextUnseen, kindOf, lightestVariant, museNeed, numberEpisodes, parseModel, parseSkits, skitPrompt, storyOf, upgradeSkit } from './muse'
 import type { Muse, MuseSkit } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
 import type { News } from './pet'
@@ -79,7 +79,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   const calls = new Map<string, { sid: string; tool: string; command?: string }>()
   // What the muse wrote, newest first, and how it is doing.
   // Kept across restarts (and shared by every opencode open): a turn opens with the last ones.
-  const [muse, updateMuse] = context.storage.store<{ skits?: MuseSkit[] }>('muse', { initial: { skits: [] } })
+  const [muse, updateMuse] = context.storage.store<{ skits?: MuseSkit[]; seen?: number }>('muse', { initial: { skits: [] } })
   const [museState, setMuseState] = createSignal<MuseState>({ isBusy: false, error: null, via: null, at: 0, made: 0 })
   // Set once opencode's free tier turns a direct call down: from then on, ask through the session.
   let viaSession = false
@@ -353,7 +353,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   // ---- the muse ----------------------------------------------------------
 
   /** The skits kept (a store from before skits has none). */
-  const museOf = (): Muse => ({ skits: (muse.skits ?? []).map(upgradeSkit) })
+  const museOf = (): Muse => ({ skits: (muse.skits ?? []).map(upgradeSkit), ...(muse.seen !== undefined ? { seen: muse.seen } : {}) })
 
   const withTimeout = <T,>(p: Promise<T>, ms: number) =>
     Promise.race([p, new Promise<never>((_, reject) => later(ms, () => reject(new Error(`no reply in ${ms / 1000}s`))))])
@@ -519,6 +519,12 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     /** The label of the tool a session runs now (the latest, subagents counted). */
     toolOf,
     subagentsOf,
+    /** The series' next episode not played through yet, for the show. */
+    nextEpisode: () => nextUnseen(museOf()),
+    /** An episode played through: the series moves on, for every window. */
+    markSeen(episode: number) {
+      if ((muse.seen ?? 0) < episode) void updateMuse(d => void (d.seen = Math.max(d.seen ?? 0, episode)))
+    },
     /** What the muse wrote, for the scene; kept across restarts. */
     muse: (): Muse => museOf(),
     museState,

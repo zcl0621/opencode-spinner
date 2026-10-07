@@ -6,9 +6,9 @@ import { expect, test } from 'bun:test'
 import { AUDIO_BANDS, SoundSeed, lineSplitter, parseTapLine, seedFrom } from '../src/audio'
 import { canvas, cells, dot, octantBits, plot } from '../src/cells'
 import { VIGNETTES, benchScene, poolOf, toolKind, vignetteAt } from '../src/clawd'
-import { ACTIONS, BACKDROPS, CAPTION_W, EPISODE_EVERY_MS, upgradeSkit, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, episodeDue, museNeed, numberEpisodes, parseModel, parseSkits, seedLine, skitPrompt, storyOf } from '../src/muse'
+import { ACTIONS, BACKDROPS, CAPTION_W, EPISODE_EVERY_MS, upgradeSkit, EFFECTS, HAT_W, MOTIONS, MUSE_LOW, PROP_H, PROP_W, SKIES, WEATHERS, jsonOf, kindOf, lightestVariant, episodeDue, museNeed, nextUnseen, numberEpisodes, parseModel, parseSkits, seedLine, skitPrompt, storyOf } from '../src/muse'
 import type { Muse, MuseSkit } from '../src/muse'
-import { SHOW_ROWS, nextStage, showScene, stretchAt } from '../src/show'
+import { SHOW_ROWS, episodeDone, nextStage, showScene, stretchAt } from '../src/show'
 import { castAt, skitLength, skitScene } from '../src/stage'
 import { SAMPLE_SKITS } from '../scripts/samples'
 import { parseCommand } from '../src/command'
@@ -380,10 +380,15 @@ test('muse: model ids, prompts, and replies read strictly', () => {
   expect(o.props[0]).toEqual({ id: 'x', frames: [['AAA', '.B.']], colors: { A: '#ff0000', B: '#00ff00' }, x: 1, motion: 'still', effect: 'none' })
   expect(o.props[1]!.frames[0]!.length).toBe(PROP_H)
   expect(o.props[1]!.frames[0]![0]!.length).toBe(PROP_W)
-  expect(o.beats.map(b => b.acts[0]!.do)).toEqual(['walk', 'stand', 'wave', 'wave', 'wave', 'wave'])
+  // The first skit is the episode: up to 60 seconds.
+  expect(o.beats.map(b => b.acts[0]!.do)).toEqual(['walk', 'stand', 'wave', 'wave', 'wave', 'wave', 'wave'])
   expect(o.beats[0]).toEqual({ secs: 6, acts: [{ who: 0, do: 'walk', to: null, prop: null, with: null, effect: 'none', say: '' }] })
   expect(o.beats[1]!.acts[0]!.say).toBe('hi there')
-  expect(o.beats.reduce((n, b) => n + b.secs, 0)).toBeLessThanOrEqual(36)
+  expect(o.beats.reduce((n, b) => n + b.secs, 0)).toBeLessThanOrEqual(60)
+  // A second skit stays within 36.
+  const waves = Array.from({ length: 10 }, () => ({ do: 'wave', secs: 6 }))
+  const pair = parseSkits(JSON.stringify({ skits: [{ title: 'One', beats: waves }, { title: 'Two', beats: waves }] }), 'think')
+  expect(pair.map(k => k.beats.reduce((n, b) => n + b.secs, 0))).toEqual([60, 36])
   expect(HAT_W).toBe(28)
 })
 
@@ -617,21 +622,61 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   expect(asked(t0 + 1000)).toBeLessThan(100)
   expect(asked(t0 + EPISODE_EVERY_MS)).toBe(100)
 
-  // On stage: the episode in the title, the caption over its beat, at any width.
+  // On stage: an opening card (the episode, the story so far), the beats with their captions, a closing card; at any width.
   const ep = kept[0]!
-  const texts: string[] = []
+  expect(ep.recap).toBe('BLOOP lost the bug, then found it in the soup.')
+  const frames: string[] = []
   for (const w of [16, 40, 90]) for (let t = 0; t < skitLength(ep) + 3; t++) {
     const g = skitScene(ep, t, w, 1)
     for (const row of g) expect(widthOf(row)).toBe(w)
-    if (w === 90) texts.push(g[0]!.map(c => c.ch).join(''))
+    if (w === 90) frames.push(g.map(r => r.map(c => c.ch).join('')).join('\n'))
   }
-  expect(texts[0]).toContain('Ep.5 Part 5')
-  expect(texts.slice(0, 20).join('\n')).toContain('Meanwhile, in the kitchen')
-  expect(texts.slice(25, 40).join('\n')).not.toContain('Meanwhile')
+  const CARD = 45
+  expect(skitLength(ep)).toBe(CARD + 60 + 20)
+  expect(frames[0]).toContain('Ep.5 Part 5')
+  expect(frames[0]).toContain('Previously: BLOOP lost the bug, then found it in the soup.')
+  expect(frames.slice(CARD, CARD + 20).join('\n')).toContain('Meanwhile, in the kitchen')
+  expect(frames.slice(CARD + 25, CARD + 40).join('\n')).not.toContain('Meanwhile')
+  expect(frames[skitLength(ep) - 1]).toContain('To be continued…')
+  // The first episode has no story before it.
+  expect(skitScene({ ...ep, recap: undefined }, 0, 90, 1).map(r => r.map(c => c.ch).join('')).join('')).toContain('A new series begins')
 })
 
 test('the language option takes a name as well as a code', () => {
   for (const [option, want] of [['zh', 'zh-Hans'], ['中文', 'zh-Hans'], ['English', 'en'], ['zh-Hant', 'zh-Hant'], ['klingon', 'ja']] as const) {
     expect(resolveLanguage(option, undefined, ['ja_JP.UTF-8'])).toBe(want)
   }
+})
+
+test('the series plays in order: the next episode not seen comes first, whatever the work, and holds the stage', () => {
+  const base = parseSkits(JSON.stringify(SAMPLE_SKITS), 'think')[0]!
+  const ep = (n: number, kind: MuseSkit['kind'] = 'edit'): MuseSkit => ({ ...base, kind, title: `Part ${n}`, episode: n, summary: `part ${n}` })
+  const [e1, e2, e3] = [ep(1), ep(2, 'shell'), ep(3)]
+  const muse = { skits: [e3, base, e2, e1] }
+  // Nothing seen yet: start from the newest.
+  expect(nextUnseen(muse)?.episode).toBe(3)
+  expect(nextUnseen({ ...muse, seen: 1 })?.episode).toBe(2)
+  expect(nextUnseen({ ...muse, seen: 3 })).toBeUndefined()
+  // An episode kept without its recap gets the one before's summary.
+  expect(nextUnseen({ ...muse, seen: 1 })?.recap).toBe('part 1')
+  expect(nextStage(nextStage(undefined, 'think', 0, muse, e2), 'think', 999, muse, { ...e2 }).since).toBe(0)
+
+  // The agent is thinking, the episode is about shell work: it plays anyway, from its card.
+  let stage = nextStage(undefined, 'think', 0, muse, e2)
+  expect(stage.episode).toBe(e2)
+  const first = showScene(0, 90, 'think', undefined, muse, 1, stage).map(r => r.map(c => c.ch).join('')).join('')
+  expect(first).toContain('Ep.2 Part 2')
+  // The work changes mid-episode: the stage holds.
+  for (let t = 1; t < skitLength(e2); t += 7) stage = nextStage(stage, t % 2 ? 'edit' : 'search', t, muse, e2)
+  expect(stage.episode).toBe(e2)
+  expect(episodeDone(stage, skitLength(e2) - 1)).toBe(false)
+  expect(episodeDone(stage, skitLength(e2))).toBe(true)
+  // Over, and the next one waits: it comes on after the hold.
+  const end = skitLength(e2)
+  stage = nextStage(stage, 'edit', end, muse, e3)
+  expect(stage.episode).toBe(e3)
+  expect(stage.since).toBe(end)
+  // No episode left: the work's own skits again.
+  const after = nextStage(stage, 'edit', end + skitLength(e3) + 100, muse, undefined)
+  expect(showScene(end + skitLength(e3) + 100, 90, 'tool', 'edit: a.ts', muse, 1, after)).toHaveLength(SHOW_ROWS)
 })

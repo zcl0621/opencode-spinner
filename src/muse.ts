@@ -211,10 +211,12 @@ export type MuseSkit = {
   /** Its number in the series, when it is an episode (`numberEpisodes`), and when it was made (ms). */
   episode?: number
   at?: number
+  /** For an episode: the summary of the one before, shown on its opening card. */
+  recap?: string
 }
 
-/** What the show gets: the skits made so far, newest first. */
-export type Muse = { skits: readonly MuseSkit[] }
+/** What the show gets: the skits made so far, newest first, and the last episode played through. */
+export type Muse = { skits: readonly MuseSkit[]; seen?: number }
 
 export const TITLE_W = 24
 export const SAY_W = 24
@@ -224,6 +226,8 @@ export const MAX_PROPS = 4
 export const MAX_BEATS = 10
 export const MAX_ACTS = 3
 export const MAX_SECS = 36
+/** An episode may run longer, to tell its story. */
+export const MAX_EPISODE_SECS = 60
 export const CAPTION_W = 28
 /** The summary the prompt asks for, and what is kept (a little more, so one running long isn't cut). */
 export const SUMMARY_ASK = 120
@@ -370,7 +374,21 @@ export function numberEpisodes(made: readonly MuseSkit[], muse: Muse, now = Date
     const regular = regulars.find(r => r.name.toLowerCase() === a.name.toLowerCase())
     return regular && !a.look ? { ...a, look: regular.look } : a
   })
-  return [{ ...first!, cast, episode: nextEpisode(muse), at: now }, ...rest]
+  const before = storyOf(muse).previously.at(-1)
+  return [{ ...first!, cast, episode: nextEpisode(muse), at: now, ...(before ? { recap: before.summary } : {}) }, ...rest]
+}
+
+/** The next episode to play: the first after the last one played through (none yet: the newest). */
+export function nextUnseen(muse: Muse): MuseSkit | undefined {
+  const episodes = muse.skits.filter(s => s.episode !== undefined).sort((a, b) => a.episode! - b.episode!)
+  if (episodes.length === 0) return undefined
+  const seen = muse.seen ?? episodes[episodes.length - 1]!.episode! - 1
+  const at = episodes.findIndex(s => s.episode! > seen)
+  if (at < 0) return undefined
+  const next = episodes[at]!
+  // Kept before episodes carried their recap: the summary of the one before.
+  const before = episodes[at - 1]?.summary
+  return next.recap || !before ? next : { ...next, recap: before }
 }
 
 function storyLines(story: Story | undefined): string[] {
@@ -394,7 +412,8 @@ export function skitPrompt(kind: Kind, detail: string | undefined, lang: Lang, s
     PREAMBLE,
     `The coding agent is ${KIND_WORDS[kind]}${detail ? ` (now: ${detail})` : ''}. Write 2 skits that play while it does that: the Clawds acting out, joking about or helping with that kind of work, in their own way.`,
     seedLine(seed),
-    'Be inventive and make the two skits very different: different places, casts, props, actions and gags. Think of scenes from films, novels and shows: a band on stage, a car chase, a cooking duel, a kung fu fight, a magic trick, a parade. A skit lasts 8 to 30 seconds.',
+    'Be inventive and make the two skits very different: different places, casts, props, actions and gags. Think of scenes from films, novels and shows: a band on stage, a car chase, a cooking duel, a kung fu fight, a magic trick, a parade. The second skit lasts 8 to 30 seconds.',
+    'The first skit is a fuller episode: 30 to 60 seconds in 6 to 10 beats, with time to set the scene, build the trouble and pay it off, and the same place all the way through so it is easy to follow.',
     'Each skit tells a tiny story: a setup, then trouble or a twist (something breaks, a rival shows up, a plan goes wrong), then how it is solved or a punchline. Every beat moves it on; do not just cheer in a loop.',
     ...storyLines(story),
     'Reply exactly in this shape (the values only show the format: invent your own):',
@@ -661,7 +680,7 @@ function readAct(item: Record<string, unknown>, cast: readonly SkitActor[], prop
   return { who, do: act, to: fraction(item.to), prop, with: withWho, effect: oneOf(EFFECTS, item.effect, 'none'), say: isPlaceholder(said) ? '' : said }
 }
 
-function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly SkitProp[], moves: readonly SkitMove[] = []): SkitBeat[] {
+function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly SkitProp[], moves: readonly SkitMove[] = [], maxSecs = MAX_SECS): SkitBeat[] {
   const out: SkitBeat[] = []
   let total = 0
   for (const item of Array.isArray(raw) ? raw.slice(0, MAX_BEATS) : []) {
@@ -675,7 +694,7 @@ function readBeats(raw: unknown, cast: readonly SkitActor[], props: readonly Ski
     }
     if (acts.length === 0) continue
     const secs = typeof item.secs === 'number' && Number.isFinite(item.secs) ? Math.min(6, Math.max(1, item.secs)) : 2
-    if (total + secs > MAX_SECS) break
+    if (total + secs > maxSecs) break
     total += secs
     const caption = unnumbered(line(item.caption, CAPTION_W))
     out.push({ secs, acts, ...(caption && !isPlaceholder(caption) ? { caption } : {}) })
@@ -709,7 +728,7 @@ export function parseSkits(text: string, kind: Kind): MuseSkit[] {
   const one = [...text.matchAll(/\{\s*"title"/g)].map(m => mendedObject(text, m.index!)).filter(isRecord)
   if (one.length > list.length) list = one
   const out: MuseSkit[] = []
-  for (const item of list.slice(0, 4)) {
+  for (const [at, item] of list.slice(0, 4).entries()) {
     if (!isRecord(item)) continue
     const title = unnumbered(line(item.title, TITLE_W))
     if (!title || isPlaceholder(title)) continue
@@ -717,7 +736,8 @@ export function parseSkits(text: string, kind: Kind): MuseSkit[] {
     // Props copied from the format example (even with a few pixels changed) are not the model's own.
     const props = readProps(item.props).filter(p => !p.frames.some(f => EXAMPLE.props.some(e => e.frames.some(ef => alike(f, ef)))))
     const moves = readMoves(item.moves)
-    const beats = readBeats(item.beats, cast, props, moves)
+    // The first skit of a reply is the episode (numberEpisodes): it may run longer.
+    const beats = readBeats(item.beats, cast, props, moves, at === 0 ? MAX_EPISODE_SECS : MAX_SECS)
     if (beats.length < 2) continue
     // Only the moves some act uses.
     const used = moves.filter(m => beats.some(b => b.acts.some(a => a.move === m.name)))

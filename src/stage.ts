@@ -11,6 +11,7 @@ import { canvas, cells, dot, drawFine, frame, mod, noise, overlay, put, textWidt
 import type { Canvas, Grid, Style } from './cells'
 import { CLAWD_W, drawClawd, poseArt } from './clawd'
 import type { Arm, Legs } from './clawd'
+import { m } from './i18n'
 import { upgradeSkit } from './muse'
 import type { MuseLook, MuseSkit, SkitAct, SkitProp } from './muse'
 import { backdrop, skyBody, weather } from './place'
@@ -44,8 +45,16 @@ function current(skit: MuseSkit): MuseSkit {
   return s
 }
 
-/** How long a skit plays, in ticks. */
-export const skitLength = (skit: MuseSkit) => Math.round(current(skit).beats.reduce((n, b) => n + b.secs, 0) * TPS)
+/** An episode opens on a card (its title and the story so far) and closes on another (to be continued). */
+const RECAP_TICKS = 45
+const END_TICKS = 20
+/** Ticks the beats take. */
+const beatsLength = (skit: MuseSkit) => Math.round(skit.beats.reduce((n, b) => n + b.secs, 0) * TPS)
+/** How long a skit plays, in ticks (an episode's cards included). */
+export const skitLength = (skit: MuseSkit) => {
+  const s = current(skit)
+  return beatsLength(s) + (s.episode !== undefined ? RECAP_TICKS + END_TICKS : 0)
+}
 
 // ---- acting it out --------------------------------------------------------------
 
@@ -996,12 +1005,67 @@ function speech(g: Grid, text: string, x: number, row: number): void {
   overlay(g, at, row, `“${text}”`, { c: '#e9e4da' })
 }
 
+/** Lines of `text` no wider than `w` cells, broken at spaces where it can (anywhere in CJK). */
+function wrap(text: string, w: number): string[] {
+  const out: string[] = []
+  let lineText = ''
+  for (const word of text.split(/(?<=\s)|(?=[\u3000-\u9fff\uff00-\uffef])/)) {
+    if (textWidth(lineText + word) <= w) lineText += word
+    else {
+      if (lineText.trim()) out.push(lineText.trimEnd())
+      lineText = word.trimStart()
+      while (textWidth(lineText) > w) {
+        let cut = ''
+        for (const ch of lineText) {
+          if (textWidth(cut + ch) > w) break
+          cut += ch
+        }
+        out.push(cut)
+        lineText = lineText.slice(cut.length)
+      }
+    }
+  }
+  if (lineText.trim()) out.push(lineText.trimEnd())
+  return out
+}
+
+/** An episode's card: its place, empty, with text over it. */
+function card(skit: MuseSkit, t: number, w: number, seed: number, lines: { text: string; style: Style }[]): Grid {
+  const cv = canvas(w, STAGE_ROWS)
+  const place = skit.place
+  if (place) {
+    skyBody(cv, place, 1)
+    backdrop(cv, place, 0, FLOOR - 1, 0, t)
+    ground(cv, 0, FLOOR, 1, place.backdrop === 'road' ? ROAD : [place.colors.ground, place.colors.near, place.colors.ground])
+  } else ground(cv, 0, FLOOR, 1, WOOD)
+  const g = cells(cv)
+  if (place) weather(g, place, t, seed)
+  lines.slice(0, STAGE_ROWS - 1).forEach((l, row) => overlay(g, Math.max(0, Math.floor((w - textWidth(l.text)) / 2)), row, l.text, l.style))
+  return g
+}
+
 /** The skit at tick `t` (from its start) on a stage `w` cells wide. */
 export function skitScene(raw: MuseSkit, t: number, w: number, seed = 0): Grid {
   const skit = current(raw)
+  if (skit.episode !== undefined) {
+    const accent = skit.place?.colors.accent ?? '#e9b49a'
+    const heading = `▸ Ep.${skit.episode} ${skit.title}`
+    if (t < RECAP_TICKS) {
+      const story = skit.recap ? m('show.previously', { text: skit.recap }) : m('show.newSeries')
+      const body = wrap(story, Math.max(8, w - 4)).slice(0, STAGE_ROWS - 3)
+      return card(skit, t, w, seed, [{ text: heading, style: { c: accent, b: true } }, { text: '', style: {} }, ...body.map(text => ({ text, style: { c: '#c0caf5' } }))])
+    }
+    const into = t - RECAP_TICKS
+    if (into >= beatsLength(skit)) return card(skit, t, w, seed, [{ text: '', style: {} }, { text: '', style: {} }, { text: m('show.continued'), style: { c: accent, b: true } }])
+    return play(skit, into, w, seed, heading)
+  }
+  return play(skit, t, w, seed, `▸ ${skit.title}`)
+}
+
+function play(skit: MuseSkit, t: number, w: number, seed: number, title: string): Grid {
   const cv = canvas(w, STAGE_ROWS)
   const place = skit.place
-  const m = momentAt(skit, Math.min(t, skitLength(skit) - 1), w)
+  const m = momentAt(skit, Math.min(t, beatsLength(skit) - 1), w)
   if (place) {
     skyBody(cv, place, 1)
     backdrop(cv, place, m.scroll * 0.4, FLOOR - 1, 0, t)
@@ -1049,10 +1113,9 @@ export function skitScene(raw: MuseSkit, t: number, w: number, seed = 0): Grid {
     used.add(row)
     speech(g, l.say, a.x, row)
   }
-  const title = `▸ ${skit.episode !== undefined ? `Ep.${skit.episode} ` : ''}${skit.title}`
   if (t < TITLE_TICKS) overlay(g, 1, 0, title, { c: place?.colors.accent ?? '#e9b49a', d: t > TITLE_TICKS - 6 })
   // The narrator's caption for the beat playing, at the top right (after the title, if they would meet).
-  const caption = captionAt(skit, Math.min(t, skitLength(skit) - 1))
+  const caption = captionAt(skit, Math.min(t, beatsLength(skit) - 1))
   if (caption) {
     const shown = `~ ${caption.text} ~`
     const cw = textWidth(shown)
