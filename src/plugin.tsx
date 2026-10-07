@@ -87,7 +87,9 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
   const t = useTick(STAGE_MS, s.config.isStill)
   const sid = createMemo(() => s.rootOf(props.sessionID))
 
-  const pet = createMemo(() => s.dockOf(sid()))
+  // Subagents left running in the background: looked at each tick (opencode's status is not a signal here).
+  const background = createMemo(() => (t(), s.subagentsOf(sid())))
+  const pet = createMemo(() => (background(), s.dockOf(sid())))
   const isCompact = () => columns() < COMPACT_COLUMNS || dims().height < COMPACT_ROWS
 
   /** What the scene shows, if anything: the turn, or the finale. */
@@ -96,6 +98,7 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
     const r = s.run(sid())
     if (r.isTurn) return { act: s.stateOf(sid()) === 'ask' ? ('ask' as const) : r.act, finale: null }
     if (r.finale) return { act: r.act, finale: r.finale }
+    if (background() > 0) return { act: 'tool' as const, finale: null }
     return null
   })
 
@@ -104,7 +107,8 @@ function Band(props: { spinner: Spinner; sessionID: string }) {
   const sceneKey = createMemo(() => {
     const r = s.run(sid())
     if (r.isTurn) return `turn:${r.started}`
-    return r.finale ? `finale:${r.finale.id}` : ''
+    if (r.finale) return `finale:${r.finale.id}`
+    return background() > 0 ? `background:${r.started}` : ''
   })
   let keyed = ''
   let base = 0

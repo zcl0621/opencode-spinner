@@ -15,7 +15,7 @@ setLang('en')
 
 type Handler = (event: { type: string; data: unknown }) => void
 
-function fake(options: Record<string, unknown> = {}, roots: Record<string, string> = {}, client: unknown = {}, shown?: { route: string | null; tabs?: string[] }) {
+function fake(options: Record<string, unknown> = {}, roots: Record<string, string> = {}, client: unknown = {}, shown?: { route: string | null; tabs?: string[] }, known?: Set<string>, running?: Set<string>) {
   const handlers = new Map<string, Set<Handler>>()
   const toasts: string[] = []
   const storage = <T extends object>(initial: T) => {
@@ -31,7 +31,14 @@ function fake(options: Record<string, unknown> = {}, roots: Record<string, strin
         handlers.get(type)!.add(handler)
         return () => handlers.get(type)!.delete(handler)
       },
-      session: { root: (sid: string) => roots[sid] ?? sid },
+      session: {
+        root: (sid: string) => roots[sid] ?? sid,
+        ...(known && { get: (sid: string) => (known.has(sid) ? { id: sid } : undefined), sync: async () => {} }),
+        ...(running && {
+          family: (sid: string) => [sid, ...Object.keys(roots).filter(c => roots[c] === sid)],
+          status: (sid: string) => (running.has(sid) ? 'running' : 'idle'),
+        }),
+      },
     },
     storage: {
       store: (_key: string, o: { initial: object }) => storage(o.initial),
@@ -54,8 +61,8 @@ let current: Spinner | undefined
 afterEach(() => current?.dispose())
 
 /** No tap (it would build swiftc) and no model unless a test asks for them. */
-function start(options?: Record<string, unknown>, roots?: Record<string, string>, client?: unknown, shown?: { route: string | null; tabs?: string[] }) {
-  const f = fake({ sound: false, model: false, ...options }, roots, client, shown)
+function start(options?: Record<string, unknown>, roots?: Record<string, string>, client?: unknown, shown?: { route: string | null; tabs?: string[] }, known?: Set<string>, running?: Set<string>) {
+  const f = fake({ sound: false, model: false, ...options }, roots, client, shown, known, running)
   current = f.spinner
   return f
 }
@@ -386,4 +393,49 @@ test('the palette switches the language between Chinese and English, and keeps i
   expect(spinner.toggleLanguage()).toBe('en')
   expect(spinner.dockOf(S)!.bubble).toBe('I’m here with you~')
   setLang('en')
+})
+
+test('a subagent session that sends events before it is synced is not taken for a root', async () => {
+  const asked: string[] = []
+  const client = { generate: { text: async (input: { prompt: string }) => (asked.push(input.prompt), reply(input.prompt)) } }
+  const CHILD = 'ses_child'
+  const roots: Record<string, string> = {}
+  const known = new Set([S])
+  const { spinner, emit } = start({ model: 'anthropic/claude-haiku-4-5' }, roots, client, { route: S }, known)
+  emit('session.execution.started', { sessionID: S })
+  await Bun.sleep(0)
+  emit('session.tool.input.started', { sessionID: S, id: 't1', name: 'task' })
+  // The subagent starts: this window has not synced its session yet, so it looks like a root.
+  emit('session.execution.started', { sessionID: CHILD })
+  expect(spinner.run(CHILD).isTurn).toBe(false)
+  // Synced: now it has a parent, and its end is ignored like the rest of its events.
+  known.add(CHILD)
+  roots[CHILD] = S
+  emit('session.execution.succeeded', { sessionID: CHILD })
+  await Bun.sleep(0)
+  expect(asked.length).toBe(1)
+  // The root's turn plays on through the subagent's run.
+  expect(spinner.run(S).isTurn).toBe(true)
+  expect(spinner.stateOf(S)).toBe('tool')
+})
+
+test('a subagent sent to the background keeps the pet busy after the turn ends', () => {
+  const roots: Record<string, string> = { ses_child: S }
+  const running = new Set<string>()
+  const { spinner, emit } = start({}, roots, undefined, undefined, undefined, running)
+  emit('session.execution.started', { sessionID: S })
+  running.add('ses_child')
+  // ctrl+b: the root's turn ends while the subagent works on.
+  emit('session.execution.succeeded', { sessionID: S })
+  expect(spinner.run(S).isTurn).toBe(false)
+  expect(spinner.subagentsOf(S)).toBe(1)
+  expect(spinner.stateOf(S)).toBe('tool')
+  expect(spinner.toolOf(S)).toBe('subagent')
+  expect(spinner.dockOf(S)!.bubble).toBe('subagent')
+  roots.ses_two = S
+  running.add('ses_two')
+  expect(spinner.toolOf(S)).toBe('subagent ×2')
+  // Done: back to how the turn ended.
+  running.clear()
+  expect(spinner.stateOf(S)).toBe('ready')
 })

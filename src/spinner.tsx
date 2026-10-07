@@ -134,10 +134,32 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   }
 
   /** What the pet shows for a session: the turn's act while it runs (a waiting ask first), else its mood. */
+  /**
+   * Subagents of a root session still running after its own turn ended (sent to
+   * the background with ctrl+b): the show and the pet keep going for them.
+   */
+  function subagentsOf(sid: string): number {
+    try {
+      return context.data.session.family(sid).filter(id => id !== sid && context.data.session.status(id) === 'running').length
+    } catch {
+      return 0
+    }
+  }
+
+  /** The tool label: the calls running, else the subagents left working in the background. */
+  function toolOf(sid: string): string {
+    const r = run(sid)
+    const label = busyLabel(Object.values(r.running))
+    if (label || r.isTurn) return label ?? ''
+    const n = subagentsOf(sid)
+    return n > 1 ? `subagent ×${n}` : n === 1 ? 'subagent' : ''
+  }
+
   function stateOf(sid: string): PetState {
     const r = run(sid)
     if (isAsking(sid)) return 'ask'
-    return r.isTurn ? r.act : r.mood
+    if (r.isTurn) return r.act
+    return subagentsOf(sid) > 0 ? 'tool' : r.mood
   }
 
   /** Busy with the latest tool still running, else back to thinking. */
@@ -198,7 +220,21 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   }
 
   /** A session's own event (not a subagent's): the sid, or null. */
-  const own = (sid: string) => (rootOf(sid) === sid ? sid : null)
+  /**
+   * The session if it is a root one, else null. A subagent's session sends its
+   * first events before this window has synced it: unknown, it would pass for a
+   * root and open a turn that never closes. So an unknown session counts only
+   * when this window shows it (and is synced for the events after).
+   */
+  const own = (sid: string): string | null => {
+    let known = true
+    try {
+      known = !!context.data.session.get(sid)
+      if (!known) void context.data.session.sync(sid).catch(() => {})
+    } catch {}
+    if (rootOf(sid) !== sid) return null
+    return known || isHere(sid) ? sid : null
+  }
   /**
    * Whether this window shows the session: the one open now, or one of its tabs.
    * Every window hears every session's events, so only this one asks the muse,
@@ -421,7 +457,7 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     const id = `${name}:${state}:${patId ?? ''}:${outfit?.key ?? ''}`
     const view = {
       id,
-      bubble: said ? m(`pet.${said.kind}`) : bubbleOf(state, busyLabel(Object.values(r.running))),
+      bubble: said ? m(`pet.${said.kind}`) : bubbleOf(state, toolOf(sid) || undefined),
       tone: said?.kind === 'testFail' ? ('error' as const) : (TONE[state] ?? ('plain' as const)),
       stats: `Lv.${levelOf(pet.xp)} ♥${pet.love}`,
     }
@@ -481,7 +517,8 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     rootOf,
     run,
     /** The label of the tool a session runs now (the latest, subagents counted). */
-    toolOf: (sid: string) => busyLabel(Object.values(run(sid).running)),
+    toolOf,
+    subagentsOf,
     /** What the muse wrote, for the scene; kept across restarts. */
     muse: (): Muse => museOf(),
     museState,
