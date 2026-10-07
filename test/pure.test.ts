@@ -629,3 +629,9 @@ test('the story: captions and summaries are read, episodes numbered, and the pro
   expect(texts.slice(0, 20).join('\n')).toContain('Meanwhile, in the kitchen')
   expect(texts.slice(25, 40).join('\n')).not.toContain('Meanwhile')
 })
+
+test('the language option takes a name as well as a code', () => {
+  for (const [option, want] of [['zh', 'zh-Hans'], ['中文', 'zh-Hans'], ['English', 'en'], ['zh-Hant', 'zh-Hant'], ['klingon', 'ja']] as const) {
+    expect(resolveLanguage(option, undefined, ['ja_JP.UTF-8'])).toBe(want)
+  }
+})

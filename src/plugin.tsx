@@ -320,6 +320,13 @@ function Commands(props: { context: Plugin.Context; spinner: Spinner }) {
         palette: true,
         run: () => runCommand('pet'),
       },
+      {
+        id: 'spinner.language',
+        title: 'Spinner: 中文 / English',
+        group: 'Spinner',
+        palette: true,
+        run: () => toast(m('cmd.language', { name: s.toggleLanguage() === 'en' ? 'English' : '简体中文' })),
+      },
     ],
   }))
   return null

@@ -377,3 +377,13 @@ test('the muse: an empty reply is asked again once; empty twice says so', async 
   await expect(twice.spinner.inspireNow(S)!).rejects.toThrow('empty reply, twice')
   expect(calls).toBe(2)
 })
+
+test('the palette switches the language between Chinese and English, and keeps it', () => {
+  const { spinner } = start({ language: 'en' })
+  expect(spinner.toggleLanguage()).toBe('zh-Hans')
+  expect(spinner.prefs.language).toBe('zh-Hans')
+  expect(spinner.dockOf(S)!.bubble).toBe('我在这儿陪你～')
+  expect(spinner.toggleLanguage()).toBe('en')
+  expect(spinner.dockOf(S)!.bubble).toBe('I’m here with you~')
+  setLang('en')
+})

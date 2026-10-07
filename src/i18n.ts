@@ -10,6 +10,7 @@ export type Key =
   | 'cmd.museError'
   | 'cmd.museVia'
   | 'cmd.pat'
+  | 'cmd.language'
   | 'cmd.petStats'
   | 'finale.done'
   | 'finale.aborted'
@@ -42,6 +43,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "Muse: the last try failed: {error}",
     'cmd.museVia': "(opencode's free tier: through the session's model)",
     'cmd.pat': 'You patted {theme} (♥{love})',
+    'cmd.language': 'Language: {name}',
     'cmd.petStats': '{theme} · Lv.{level} · {xp} xp · ♥{love}',
     'finale.done': 'Done · {time}',
     'finale.aborted': 'Interrupted',
@@ -73,6 +75,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "灵感模型：上次失败：{error}",
     'cmd.museVia': "（opencode 免费档：借用会话的模型）",
     'cmd.pat': '你摸了摸 {theme}（♥{love}）',
+    'cmd.language': '语言：{name}',
     'cmd.petStats': '{theme} · Lv.{level} · 经验 {xp} · ♥{love}',
     'finale.done': '完成 · {time}',
     'finale.aborted': '已中断',
@@ -104,6 +107,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "靈感模型：上次失敗：{error}",
     'cmd.museVia': "（opencode 免費方案：借用工作階段的模型）",
     'cmd.pat': '你摸了摸 {theme}（♥{love}）',
+    'cmd.language': '語言：{name}',
     'cmd.petStats': '{theme} · Lv.{level} · 經驗 {xp} · ♥{love}',
     'finale.done': '完成 · {time}',
     'finale.aborted': '已中斷',
@@ -135,6 +139,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "ミューズ：前回は失敗：{error}",
     'cmd.museVia': "（opencode の無料枠：セッションのモデル経由）",
     'cmd.pat': '{theme} をなでた（♥{love}）',
+    'cmd.language': '言語：{name}',
     'cmd.petStats': '{theme} · Lv.{level} · 経験値 {xp} · ♥{love}',
     'finale.done': '完了 · {time}',
     'finale.aborted': '中断しました',
@@ -166,6 +171,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "뮤즈: 지난 시도 실패: {error}",
     'cmd.museVia': "(opencode 무료 요금제: 세션의 모델을 통해)",
     'cmd.pat': '{theme}을(를) 쓰다듬었어요 (♥{love})',
+    'cmd.language': '언어: {name}',
     'cmd.petStats': '{theme} · Lv.{level} · 경험치 {xp} · ♥{love}',
     'finale.done': '완료 · {time}',
     'finale.aborted': '중단됨',
@@ -197,6 +203,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "Musa: el último intento falló: {error}",
     'cmd.museVia': "(nivel gratuito de opencode: a través del modelo de la sesión)",
     'cmd.pat': 'Acariciaste a {theme} (♥{love})',
+    'cmd.language': 'Idioma: {name}',
     'cmd.petStats': '{theme} · Nv.{level} · {xp} xp · ♥{love}',
     'finale.done': 'Listo · {time}',
     'finale.aborted': 'Interrumpido',
@@ -228,6 +235,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "Muse : le dernier essai a échoué : {error}",
     'cmd.museVia': "(offre gratuite d'opencode : via le modèle de la session)",
     'cmd.pat': 'Tu as caressé {theme} (♥{love})',
+    'cmd.language': 'Langue : {name}',
     'cmd.petStats': '{theme} · niv.\u00a0{level} · {xp}\u00a0xp · ♥{love}',
     'finale.done': 'Terminé · {time}',
     'finale.aborted': 'Interrompu',
@@ -259,6 +267,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "Muse: letzter Versuch fehlgeschlagen: {error}",
     'cmd.museVia': "(Gratis-Stufe von opencode: über das Modell der Sitzung)",
     'cmd.pat': 'Du hast {theme} gestreichelt (♥{love})',
+    'cmd.language': 'Sprache: {name}',
     'cmd.petStats': '{theme} · Lv.{level} · {xp} EP · ♥{love}',
     'finale.done': 'Fertig · {time}',
     'finale.aborted': 'Abgebrochen',
@@ -290,6 +299,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "Musa: a última tentativa falhou: {error}",
     'cmd.museVia': "(plano gratuito do opencode: pelo modelo da sessão)",
     'cmd.pat': 'Você fez carinho em {theme} (♥{love})',
+    'cmd.language': 'Idioma: {name}',
     'cmd.petStats': '{theme} · Nv.{level} · {xp} xp · ♥{love}',
     'finale.done': 'Pronto · {time}',
     'finale.aborted': 'Interrompido',
@@ -321,6 +331,7 @@ export const MESSAGES: Record<Lang, Record<Key, string>> = {
     'cmd.museError': "Муза: последняя попытка не удалась: {error}",
     'cmd.museVia': "(бесплатный тариф opencode: через модель сессии)",
     'cmd.pat': 'Ты погладил {theme} (♥{love})',
+    'cmd.language': 'Язык: {name}',
     'cmd.petStats': '{theme} · ур.{level} · {xp} оп. · ♥{love}',
     'finale.done': 'Готово · {time}',
     'finale.aborted': 'Прервано',

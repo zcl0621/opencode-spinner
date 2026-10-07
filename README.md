@@ -132,7 +132,7 @@ On first use the plugin compiles a small helper from `src/audio-tap.swift` into 
 - `/spinner status` (or just `/spinner`): the pet's level and affection, the model and reasoning variant in use, how many skits are kept, the last error, and where the seed comes from.
 - `/spinner pet`: pat Clawd.
 
-The command palette (`ctrl+p`) also has **Spinner** and **Spinner: pet Clawd**.
+The command palette (`ctrl+p`) also has **Spinner**, **Spinner: pet Clawd** and **Spinner: 中文 / English**.
 
 ## Options
 
@@ -161,7 +161,7 @@ All options are optional.
 | `language` | `auto`, `en`, `zh-Hans`, `zh-Hant`, `ja`, `ko`, `es`, `fr`, `de`, `pt-BR`, `ru` | `auto` |
 | `pixels` | `fine` (octants), `coarse` (half blocks), or `auto`: fine in Ghostty, coarse elsewhere | `auto` |
 
-With `language: "auto"` the plugin follows the system locale (`LC_ALL`, `LC_MESSAGES`, `LANG`) and falls back to English.
+`language` takes a code or a name (`zh`, `中文`, `English`). With `"auto"` the plugin follows the system locale (`LC_ALL`, `LC_MESSAGES`, `LANG`) and falls back to English. To switch between Chinese and English without touching `cli.json`, pick **Spinner: 中文 / English** in the command palette (`ctrl+p`); the choice is kept and overrides the option.
 
 To update, run `git -C <clone folder> pull`. To uninstall, delete the folder or the `cli.json` entry.
 

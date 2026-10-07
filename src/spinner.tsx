@@ -7,7 +7,8 @@ import { createStore, produce } from 'solid-js/store'
 
 import { SoundSeed, seedFrom } from './audio'
 import type { Config } from './config'
-import { lang, m } from './i18n'
+import { lang, m, resolveLanguage, setLang } from './i18n'
+import type { Lang } from './lang'
 import { NEWS_FRESH_MS, kindOf, lightestVariant, museNeed, numberEpisodes, parseModel, parseSkits, skitPrompt, storyOf, upgradeSkit } from './muse'
 import type { Muse, MuseSkit } from './muse'
 import { bubbleOf, busyLabel, formatDuration, levelOf, newsOf, toolLabel } from './pet'
@@ -56,7 +57,7 @@ export type Run = {
 const IDLE: Run = { isTurn: false, act: 'think', running: {}, started: 0, finale: null, mood: 'hello', news: null, seed: 0 }
 
 /** What the footer toggle sets; null follows the option. */
-type Prefs = { visible: boolean | null }
+type Prefs = { visible: boolean | null; language?: Lang | null }
 
 const TONE: Partial<Record<PetState, DockPet['tone']>> = { ask: 'ask', error: 'error', aborted: 'aborted', sleep: 'sleep' }
 
@@ -449,7 +450,10 @@ export function createSpinner(context: Plugin.Context, config: Config) {
   // ---- reactive upkeep ---------------------------------------------------
 
   let tapper: { stop: () => void } | null = null
+  // The language: the one picked in the palette (kept), else the option, else the locale.
+  const baseLang = resolveLanguage(config.language, undefined, [process.env.LC_ALL, process.env.LC_MESSAGES, process.env.LANG])
   const disposeRoot = createRoot(dispose => {
+    createEffect(() => setLang(prefs.language ?? baseLang))
     // The tap listens while the band can show and the sound seed is on.
     createEffect(() => {
       const wants = config.hasSoundSeed && isVisible() && hasStage()
@@ -487,6 +491,13 @@ export function createSpinner(context: Plugin.Context, config: Config) {
     stateOf,
     dockOf,
     patPet,
+    /** The palette's language switch: Chinese and English in turn, kept across restarts. */
+    toggleLanguage(): Lang {
+      const next: Lang = lang().startsWith('zh') ? 'en' : 'zh-Hans'
+      setLang(next)
+      void updatePrefs(d => void (d.language = next))
+      return next
+    },
     /** The footer toggle: all animations on or off, kept across restarts. */
     setVisible(isOn: boolean) {
       void updatePrefs(d => void (d.visible = isOn))

@@ -41,7 +41,11 @@ export function parseLanguage(text: unknown): Lang | null {
 
 /** The language to draw in: the option unless `auto`, then the setting, then the locale. */
 export function resolveLanguage(option: unknown, setting: unknown, locale: readonly (string | undefined)[]): Lang {
-  if (typeof option === 'string' && option !== 'auto' && (LANGS as readonly string[]).includes(option)) return option as Lang
+  // The option as written: a code or a name ("zh", "中文", "English").
+  if (typeof option === 'string' && option !== 'auto') {
+    const named = parseLanguage(option)
+    if (named) return named
+  }
   return parseLanguage(setting) ?? locale.map(parseLanguage).find(Boolean) ?? 'en'
 }
 
